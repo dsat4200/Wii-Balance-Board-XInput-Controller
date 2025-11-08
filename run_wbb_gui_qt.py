@@ -3,54 +3,15 @@ import json
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QFrame, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
-    QDoubleSpinBox, QGridLayout, QGraphicsPolygonItem
+    QDoubleSpinBox, QGridLayout
 )
-from PyQt6.QtCore import Qt, QPointF, QThread, QRectF, QSize
+from PyQt6.QtCore import Qt, QPointF, QThread, QRectF
 from PyQt6.QtGui import (
-    QFont, QColor, QPen, QBrush, QPainter, QPolygonF
+    QFont, QColor, QPen, QBrush, QPainter
 )
 from WiiBalanceBoard_qt import WiiBalanceBoard # Import the Qt-enabled API
 
-class ButtonIndicator(QWidget):
-    """
-    A custom widget that is a circle with a text label.
-    It can be set to an 'active' state (red) or 'inactive' state (gray).
-    """
-    def __init__(self, label_text):
-        super().__init__()
-        self.label = label_text
-        self.is_active = False
-        self.setFixedSize(40, 40) # MODIFIED: Was 50x50
-
-        self.active_color = QColor(220, 0, 0)
-        self.inactive_color = QColor(200, 200, 200)
-
-    def set_active(self, active):
-        if active != self.is_active:
-            self.is_active = active
-            self.update() # Trigger a repaint
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Set brush color based on state
-        color = self.active_color if self.is_active else self.inactive_color
-        painter.setBrush(QBrush(color))
-        
-        # No outline
-        painter.setPen(Qt.PenStyle.NoPen)
-        
-        # Draw circle in the center
-        rect = self.rect()
-        # Inset by 1px to avoid clipping
-        painter.drawEllipse(rect.adjusted(1, 1, -1, -1))
-        
-        # Draw label text
-        painter.setPen(Qt.GlobalColor.black)
-        font = QFont("Helvetica", 11, QFont.Weight.Bold) # MODIFIED: Was 12
-        painter.setFont(font)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.label)
+# --- REMOVED ButtonIndicator class ---
 
 class CoMWidget(QGraphicsView):
     """
@@ -68,7 +29,13 @@ class CoMWidget(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
-        # --- NEW: Draw grid lines (axes) ---
+        # --- Define pens/brushes for state changes ---
+        self.inactive_pressure_brush = QBrush(QColor(0, 0, 255, 120))
+        self.inactive_pressure_pen = QPen(QColor(0, 0, 255, 180), 1)
+        self.active_pressure_brush = QBrush(QColor(220, 0, 0, 120)) # Red
+        self.active_pressure_pen = QPen(QColor(220, 0, 0, 180), 1) # Red
+
+        # --- Draw grid lines (axes) ---
         grid_pen = QPen(QColor(230, 230, 230), 1, Qt.PenStyle.SolidLine)
         grid_pen.setCosmetic(True) # Keep it 1px
         for i in range(-10, 11):
@@ -82,7 +49,7 @@ class CoMWidget(QGraphicsView):
         self.scene.addLine(0, -100, 0, 100, QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)).setZValue(-5)
         
         # Draw labels
-        font = QFont("Helvetica", 8) # MODIFIED: Was 9
+        font = QFont("Helvetica", 8)
         top_label = self.scene.addText("Top (+Y)", font)
         top_label.setPos(-top_label.boundingRect().width() / 2, -100)
         
@@ -95,29 +62,39 @@ class CoMWidget(QGraphicsView):
         right_label = self.scene.addText("R\n(+X)", font)
         right_label.setPos(98 - right_label.boundingRect().width(), -right_label.boundingRect().height() / 2)
         
-        # --- NEW: Bounding Box Polygon ---
-        self.bounding_box = QGraphicsPolygonItem()
-        self.bounding_box.setBrush(QBrush(QColor(0, 0, 255, 40))) # Transparent blue
-        self.bounding_box.setPen(QPen(QColor(0, 0, 255, 100), 1))
-        self.bounding_box.setZValue(-1) # Behind dots
-        self.scene.addItem(self.bounding_box)
+        # --- REMOVED Bounding Box Polygon ---
         
         # --- Create pressure dots ---
-        pressure_brush = QBrush(QColor(0, 0, 255, 120)) # Semi-transparent blue
-        pressure_pen = QPen(QColor(0, 0, 255, 180), 1)
         min_r = self._map_weight_to_radius(0)
         
-        self.tl_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, pressure_pen, pressure_brush)
+        self.tl_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, self.inactive_pressure_pen, self.inactive_pressure_brush)
         self.tl_dot.setPos(-90, -90); self.tl_dot.setZValue(5)
         
-        self.tr_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, pressure_pen, pressure_brush)
+        self.tr_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, self.inactive_pressure_pen, self.inactive_pressure_brush)
         self.tr_dot.setPos(90, -90); self.tr_dot.setZValue(5)
         
-        self.bl_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, pressure_pen, pressure_brush)
+        self.bl_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, self.inactive_pressure_pen, self.inactive_pressure_brush)
         self.bl_dot.setPos(-90, 90); self.bl_dot.setZValue(5)
         
-        self.br_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, pressure_pen, pressure_brush)
+        self.br_dot = self.scene.addEllipse(0, 0, min_r * 2, min_r * 2, self.inactive_pressure_pen, self.inactive_pressure_brush)
         self.br_dot.setPos(90, 90); self.br_dot.setZValue(5)
+
+        # --- NEW: Create threshold indicators ---
+        thresh_pen = QPen(QColor(100, 100, 100), 1, Qt.PenStyle.DashLine)
+        thresh_pen.setCosmetic(True)
+        thresh_brush = QBrush(Qt.BrushStyle.NoBrush)
+        
+        self.tl_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.tl_thresh.setPos(-90, -90); self.tl_thresh.setZValue(3)
+
+        self.tr_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.tr_thresh.setPos(90, -90); self.tr_thresh.setZValue(3)
+
+        self.bl_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.bl_thresh.setPos(-90, 90); self.bl_thresh.setZValue(3)
+
+        self.br_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.br_thresh.setPos(90, 90); self.br_thresh.setZValue(3)
 
         self.com_dot = QGraphicsEllipseItem(-2, -2, 4, 4)
         self.com_dot.setBrush(QBrush(Qt.GlobalColor.red))
@@ -146,29 +123,23 @@ class CoMWidget(QGraphicsView):
         self.fitInView(self.scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         super().resizeEvent(event)
 
-    def set_target_box(self, box_coords_dict):
-        """
-        Updates the blue bounding box from a dict of CoM coordinates.
-        e.g., {'top': 0.5, 'bottom': -0.5, 'left': -0.5, 'right': 0.5}
-        """
-        # Map CoM coords (-1 to 1) to Scene coords (-90 to 90)
-        # Y is inverted
-        top_y = box_coords_dict.get('top', 0.5) * -90
-        bottom_y = box_coords_dict.get('bottom', -0.5) * -90
-        left_x = box_coords_dict.get('left', -0.5) * 90
-        right_x = box_coords_dict.get('right', 0.5) * 90
+    def update_threshold_indicators(self, thresholds_dict):
+        """Updates the size of the gray dashed threshold rings."""
+        tl_r = self._map_weight_to_radius(thresholds_dict.get('top_left', 0))
+        tr_r = self._map_weight_to_radius(thresholds_dict.get('top_right', 0))
+        bl_r = self._map_weight_to_radius(thresholds_dict.get('bottom_left', 0))
+        br_r = self._map_weight_to_radius(thresholds_dict.get('bottom_right', 0))
         
-        # Create polygon
-        polygon = QPolygonF([
-            QPointF(left_x, top_y),
-            QPointF(right_x, top_y),
-            QPointF(right_x, bottom_y),
-            QPointF(left_x, bottom_y)
-        ])
-        self.bounding_box.setPolygon(polygon)
+        self.tl_thresh.setRect(-tl_r, -tl_r, tl_r * 2, tl_r * 2)
+        self.tr_thresh.setRect(-tr_r, -tr_r, tr_r * 2, tr_r * 2)
+        self.bl_thresh.setRect(-bl_r, -bl_r, bl_r * 2, bl_r * 2)
+        self.br_thresh.setRect(-br_r, -br_r, br_r * 2, br_r * 2)
 
-    def update_dot(self, x, y, quadrants):
-        """Updates the dot position and corner pressure circles."""
+    def update_dot(self, x, y, quadrants, press_states):
+        """
+        Updates the dot position and corner pressure circles.
+        Signature changed to accept press_states dict.
+        """
         canvas_x = x * 90 
         canvas_y = y * -90
         self.com_dot.setPos(canvas_x, canvas_y)
@@ -178,6 +149,24 @@ class CoMWidget(QGraphicsView):
         bl_r = self._map_weight_to_radius(quadrants['bottom_left'])
         br_r = self._map_weight_to_radius(quadrants['bottom_right'])
         
+        # --- Update colors based on press state ---
+        tl_pressed = press_states['tl']
+        self.tl_dot.setBrush(self.active_pressure_brush if tl_pressed else self.inactive_pressure_brush)
+        self.tl_dot.setPen(self.active_pressure_pen if tl_pressed else self.inactive_pressure_pen)
+        
+        tr_pressed = press_states['tr']
+        self.tr_dot.setBrush(self.active_pressure_brush if tr_pressed else self.inactive_pressure_brush)
+        self.tr_dot.setPen(self.active_pressure_pen if tr_pressed else self.inactive_pressure_pen)
+        
+        bl_pressed = press_states['bl']
+        self.bl_dot.setBrush(self.active_pressure_brush if bl_pressed else self.inactive_pressure_brush)
+        self.bl_dot.setPen(self.active_pressure_pen if bl_pressed else self.inactive_pressure_pen)
+
+        br_pressed = press_states['br']
+        self.br_dot.setBrush(self.active_pressure_brush if br_pressed else self.inactive_pressure_brush)
+        self.br_dot.setPen(self.active_pressure_pen if br_pressed else self.inactive_pressure_pen)
+
+        # --- Update rects (size) ---
         self.tl_dot.setRect(-tl_r, -tl_r, tl_r * 2, tl_r * 2)
         self.tr_dot.setRect(-tr_r, -tr_r, tr_r * 2, tr_r * 2)
         self.bl_dot.setRect(-bl_r, -bl_r, bl_r * 2, bl_r * 2)
@@ -199,19 +188,20 @@ class BalanceBoardApp(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("Wii Balance Board Monitor (PyQt6)")
-        self.setGeometry(100, 100, 420, 700) # MODIFIED: Was 450x800
+        # Shortened window
+        self.setGeometry(100, 100, 420, 640) 
         
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15) # MODIFIED: Was 20
-        main_layout.setSpacing(10) # MODIFIED: Was 15
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
         
         # --- Total Weight ---
         total_weight_header = QLabel("Total Weight")
-        total_weight_header.setFont(QFont("Helvetica", 15, QFont.Weight.Bold)) # MODIFIED: Was 16
+        total_weight_header.setFont(QFont("Helvetica", 15, QFont.Weight.Bold))
         total_weight_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.total_weight_label = QLabel("--.- kg")
-        self.total_weight_label.setFont(QFont("Helvetica", 26, QFont.Weight.Bold)) # MODIFIED: Was 28
+        self.total_weight_label.setFont(QFont("Helvetica", 26, QFont.Weight.Bold))
         self.total_weight_label.setStyleSheet("color: #007ACC;")
         self.total_weight_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -226,8 +216,7 @@ class BalanceBoardApp(QWidget):
         self.br_label = QLabel("BR: --.- kg")
         
         for label in [self.tl_label, self.tr_label, self.bl_label, self.br_label]:
-            label.setFont(QFont("Helvetica", 11)) # MODIFIED: Was 12
-            # label.setMinimumWidth(100) # REMOVED
+            label.setFont(QFont("Helvetica", 11))
 
         v_layout_left = QVBoxLayout()
         v_layout_left.addWidget(self.tl_label)
@@ -240,42 +229,26 @@ class BalanceBoardApp(QWidget):
         quad_layout.addLayout(v_layout_left)
         quad_layout.addLayout(v_layout_right)
 
-        # --- NEW: Button Indicators ---
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10) # MODIFIED: Was 15
-        self.button_a = ButtonIndicator("A") # TL
-        self.button_b = ButtonIndicator("B") # BL
-        self.button_x = ButtonIndicator("X") # TR
-        self.button_y = ButtonIndicator("Y") # BR
-        
-        button_layout.addStretch()
-        button_layout.addWidget(self.button_a)
-        button_layout.addWidget(self.button_b)
-        button_layout.addStretch()
-        button_layout.addWidget(self.button_x)
-        button_layout.addWidget(self.button_y)
-        button_layout.addStretch()
+        # --- REMOVED: Button Indicators Layout ---
 
         # --- Center of Mass ---
-        com_header = QLabel("Center of Mass")
-        com_header.setFont(QFont("Helvetica", 15, QFont.Weight.Bold)) # MODIFIED: Was 16
-        com_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Removed header to save space
         
         self.com_widget = CoMWidget()
-        # Load the target box from config
-        self.com_widget.set_target_box(self.config.get("com_target_box", {}))
+        # --- NEW: Update threshold indicators on init ---
+        self.com_widget.update_threshold_indicators(self.thresholds)
         
         com_widget_layout = QHBoxLayout()
         com_widget_layout.addStretch()
         com_widget_layout.addWidget(self.com_widget)
         com_widget_layout.addStretch()
         
-        # --- NEW: Threshold Spinners ---
+        # --- Threshold Spinners ---
         threshold_frame = QFrame()
         threshold_frame.setFrameShape(QFrame.Shape.StyledPanel)
         threshold_layout = QGridLayout(threshold_frame)
-        threshold_layout.setSpacing(8) # MODIFIED: Was 10
-        threshold_layout.setContentsMargins(8, 8, 8, 8) # MODIFIED: Was 10
+        threshold_layout.setSpacing(8)
+        threshold_layout.setContentsMargins(8, 8, 8, 8)
 
         # Create spinners
         self.spin_tl = QDoubleSpinBox(decimals=1, minimum=0.1, maximum=100.0, singleStep=0.5, suffix=" kg")
@@ -298,7 +271,7 @@ class BalanceBoardApp(QWidget):
         # Helper for creating labels
         def create_threshold_label(text):
             lbl = QLabel(text)
-            lbl.setFont(QFont("Helvetica", 10)) # Set smaller font
+            lbl.setFont(QFont("Helvetica", 10))
             return lbl
 
         # Add to layout
@@ -313,9 +286,9 @@ class BalanceBoardApp(QWidget):
 
         # --- Tare Button ---
         self.tare_button = QPushButton("Tare (Zero)")
-        self.tare_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold)) # MODIFIED: Was 12
+        self.tare_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
         self.tare_button.setEnabled(False)
-        self.tare_button.setMinimumHeight(35) # MODIFIED: Was 40
+        self.tare_button.setMinimumHeight(35)
         
         # --- Status Bar ---
         self.status_label = QLabel("Initializing...")
@@ -326,14 +299,11 @@ class BalanceBoardApp(QWidget):
         main_layout.addWidget(total_weight_header)
         main_layout.addWidget(self.total_weight_label)
         main_layout.addWidget(quad_frame)
-        main_layout.addSpacing(5) # MODIFIED: Was 10
-        main_layout.addWidget(com_header)
-        main_layout.addLayout(button_layout) # Add buttons
+        main_layout.addSpacing(10) # Added a bit of space
         main_layout.addLayout(com_widget_layout) # Add CoM graph
-        main_layout.addSpacing(5) # MODIFIED: Was 10
-        threshold_label = QLabel("Button Thresholds:")
-        threshold_label.setFont(QFont("Helvetica", 10, QFont.Weight.Bold)) # Added smaller font
-        main_layout.addWidget(threshold_label)
+        main_layout.addSpacing(10)
+        
+        # Removed "Button Thresholds:" label to save space
         main_layout.addWidget(threshold_frame) # Add threshold controls
         main_layout.addStretch()
         main_layout.addWidget(self.tare_button)
@@ -353,9 +323,6 @@ class BalanceBoardApp(QWidget):
         self.board.ready_to_tare.connect(lambda: self.tare_button.setEnabled(True))
         self.board.tare_complete.connect(self.on_tare_complete)
         
-        # --- REMOVED ---
-        # self.board.board_button_pressed.connect(self.on_board_button_tare)
-        
         self.processing_thread.started.connect(self.board.start_processing_loop)
         self.processing_thread.finished.connect(self.processing_thread.deleteLater)
         self.board.finished.connect(self.processing_thread.quit)
@@ -369,6 +336,8 @@ class BalanceBoardApp(QWidget):
     def on_threshold_changed(self, key, value):
         """Slot to update the internal threshold when a spinner is changed."""
         self.thresholds[key] = value
+        # --- NEW: Update the visual indicators ---
+        self.com_widget.update_threshold_indicators(self.thresholds)
 
     def update_gui(self, data):
         """Slot to update all GUI elements with new data."""
@@ -381,13 +350,20 @@ class BalanceBoardApp(QWidget):
         self.bl_label.setText(f"BL: {quads['bottom_left']:.2f} kg")
         
         x, y = data['center_of_mass']
-        self.com_widget.update_dot(x, y, quads)
         
-        # Update button active states
-        self.button_a.set_active(quads['top_left'] > self.thresholds['top_left'])
-        self.button_b.set_active(quads['bottom_left'] > self.thresholds['bottom_left'])
-        self.button_x.set_active(quads['top_right'] > self.thresholds['top_right'])
-        self.button_y.set_active(quads['bottom_right'] > self.thresholds['bottom_right'])
+        # --- NEW: Determine press states ---
+        # This is the "underlying value" dict you wanted
+        press_states = {
+            'tl': quads['top_left'] > self.thresholds['top_left'],
+            'tr': quads['top_right'] > self.thresholds['top_right'],
+            'bl': quads['bottom_left'] > self.thresholds['bottom_left'],
+            'br': quads['bottom_right'] > self.thresholds['bottom_right'],
+        }
+        
+        # Pass states to widget for visualization
+        self.com_widget.update_dot(x, y, quads, press_states)
+        
+        # --- REMOVED: Old button .set_active() calls ---
 
     def set_status(self, text):
         """Slot to update the status bar."""
@@ -403,16 +379,6 @@ class BalanceBoardApp(QWidget):
         self.set_status("🔵 Taring... Please step OFF the board.")
         self.tare_button.setEnabled(False)
         self.board.perform_tare() 
-
-    # --- REMOVED ---
-    # def on_board_button_tare(self):
-    #     """
-    #     Slot for when the board's power button is pressed.
-    #     ...
-    #     """
-    #     if self.tare_button.isEnabled():
-    #         self.set_status("🔵 Tare triggered from board button.")
-    #         self.on_tare_click() # Call the existing tare function
 
     def on_tare_complete(self, success):
         """Slot for when the board signals tare is complete."""
@@ -444,14 +410,9 @@ def load_config():
             "polling_rate_hz": 30,
             "averaging_samples": 5,
             "dead_zone_kg": 0.2,
-            "auto_tare_drift_multiplier": 2.0,
-            "auto_tare_drift_sec": 5.0,
             "button_thresholds_kg": {
                 "top_left": 10.0, "bottom_left": 10.0,
                 "top_right": 10.0, "bottom_right": 10.0
-            },
-            "com_target_box": {
-                "top": 0.5, "bottom": -0.5, "left": -0.5, "right": 0.5
             }
         }
     except Exception as e:
