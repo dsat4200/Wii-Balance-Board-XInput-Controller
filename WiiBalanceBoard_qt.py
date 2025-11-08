@@ -21,19 +21,13 @@ class WiiBalanceBoard(QObject):
     """
     
     # --- Signals ---
-    # Emits processed weight data
     data_received = pyqtSignal(dict) 
-    # Emits status messages for the GUI
     status_update = pyqtSignal(str)
-    # Emits when the board is connected and calibrated, ready for tare
     ready_to_tare = pyqtSignal()
-    # Emits when the tare process is complete
     tare_complete = pyqtSignal(bool)
-    # Emits critical errors
     error_occurred = pyqtSignal(str)
-    # --- NEW: Emits when the board's power button is pressed ---
-    board_button_pressed = pyqtSignal()
-    # Signal emitted when the processing loop is truly finished
+    # --- REMOVED ---
+    # board_button_pressed = pyqtSignal() 
     finished = pyqtSignal()
 
     def __init__(self, config):
@@ -48,18 +42,10 @@ class WiiBalanceBoard(QObject):
         self.READ_TIMEOUT_MS = 20
         self.TARE_DURATION = config.get("tare_duration_sec", 3.0)
         self.averaging_samples = config.get("averaging_samples", 5)
-        
-        # --- MODIFIED: Load new auto-tare and dead zone settings ---
         self.dead_zone_kg = config.get("dead_zone_kg", 0.2)
         
-        # --- REMOVED: Auto-tare variables ---
-        # self.auto_tare_drift_multiplier = config.get(...)
-        # self.auto_tare_drift_sec = config.get(...)
-        # self.drift_timer_start = None
-        # self.last_auto_tare_check = time.time()
-        
-        # --- NEW: For button press detection ---
-        self.prev_button_state = False
+        # --- REMOVED ---
+        # self.prev_button_state = False 
         
         # --- For smoothing ---
         self.tr_samples = deque(maxlen=self.averaging_samples)
@@ -75,7 +61,7 @@ class WiiBalanceBoard(QObject):
             self.device.set_nonblocking(1)
             return True
         except (IOError, hid.HIDException, Exception) as e:
-            self.status_update.emit(f"Connection failed: {e}")
+            self.error_occurred.emit(f"Connection failed: {e}")
             return False
 
     def _set_led(self, status=True):
@@ -103,7 +89,9 @@ class WiiBalanceBoard(QObject):
                     continue
                 
                 error_code = data[3] & 0x0F
-                if error_code != 0: return False
+                if error_code != 0: 
+                    self.error_occurred.emit("Error reading calibration packet.")
+                    return False
                 
                 address = (data[4] << 8) | data[5]
                 if address == 0x0020:
@@ -111,13 +99,16 @@ class WiiBalanceBoard(QObject):
                 elif address == 0x0030:
                     data_packets[1] = data[6:22]
             
-            if len(data_packets) != 2: return False
+            if len(data_packets) != 2: 
+                self.error_occurred.emit("Calibration read timed out.")
+                return False
 
             full_data = data_packets[0] + data_packets[1]
             self._parse_calibration(full_data)
             return True
+
         except Exception as e:
-            self.status_update.emit(f"Calibration read failed: {e}")
+            self.error_occurred.emit(f"Calibration read failed: {e}")
             return False
 
     def _parse_calibration(self, data):
@@ -142,7 +133,8 @@ class WiiBalanceBoard(QObject):
         try:
             self.device.write(SET_DATA_MODE_REPORT)
             return True
-        except Exception:
+        except Exception as e:
+            self.error_occurred.emit(f"Failed to set data mode: {e}")
             return False
 
     def _parse_sensor_data(self, data):
@@ -157,10 +149,55 @@ class WiiBalanceBoard(QObject):
         
         return [top_right, bottom_right, top_left, bottom_left]
 
+    def perform_tare(self):
+        """
+        Public slot to be called to perform the "zeroing" (tare) operation.
+        Emits tare_complete(bool) signal when done.
+        """
+        if not self.device:
+            self.tare_complete.emit(False)
+            return
+
+        samples = [[], [], [], []] # 4 lists, one for each sensor
+        start_time = time.time()
+        
+        try:
+            while (time.time() - start_time) < self.TARE_DURATION:
+                data = self.device.read(64, timeout_ms=self.READ_TIMEOUT_MS)
+                if not data:
+                    continue
+                
+                sensor_data = self._parse_sensor_data(data)
+                if sensor_data:
+                    for i in range(4):
+                        samples[i].append(sensor_data[i])
+            
+            if not samples[0]:
+                self.tare_complete.emit(False)
+                return
+
+            # Average the samples for each sensor
+            self.zero_point = [sum(s) / len(s) for s in samples]
+            
+            # Clear smoothing buffers
+            self.tr_samples.clear()
+            self.br_samples.clear()
+            self.tl_samples.clear()
+            self.bl_samples.clear()
+
+            self.is_tared = True
+            self.tare_complete.emit(True)
+            
+        except Exception as e:
+            self.error_occurred.emit(f"Tare failed: {e}")
+            self.tare_complete.emit(False)
+
     def _calculate_weights(self, raw_values):
         """Interpolates raw sensor values to kg using calibration data."""
         weights_kg = [0.0] * 4
-        
+        if not self.calibration or not self.zero_point:
+            return weights_kg
+
         for i in range(4):
             raw_diff = raw_values[i] - self.zero_point[i]
             
@@ -184,21 +221,29 @@ class WiiBalanceBoard(QObject):
             if weights_kg[i] < 0:
                 weights_kg[i] = 0.0
         
+        # [TR, BR, TL, BL]
         return weights_kg
 
     def _get_processed_data(self, weights):
-        """Calculates Total Weight and CoM from the provided weights."""
+        """
+        Calculates Total Weight and CoM from the provided weights.
+        """
         tr, br, tl, bl = weights
         total_kg = sum(weights)
         
-        # --- MODIFIED: Use dead_zone_kg from config ---
         if total_kg < self.dead_zone_kg:
             total_kg = 0.0
             tr = br = tl = bl = 0.0
             x_pos, y_pos = 0.0, 0.0
         else:
+            # X-axis: (Right - Left)
             x_pos = ((tr + br) - (tl + bl)) / total_kg
+            # Y-axis: (Top - Bottom)
             y_pos = ((tr + tl) - (br + bl)) / total_kg
+            
+            # Clamp CoM to -1.0 to 1.0
+            x_pos = max(-1.0, min(1.0, x_pos))
+            y_pos = max(-1.0, min(1.0, y_pos))
         
         return {
             "total_kg": total_kg,
@@ -208,82 +253,33 @@ class WiiBalanceBoard(QObject):
             },
             "center_of_mass": (x_pos, y_pos)
         }
-
-    # --- Public Slots ---
-    
-    def _clear_samples(self):
-        """Helper to clear sample buffers, e.g., after taring."""
-        self.tr_samples.clear()
-        self.br_samples.clear()
-        self.tl_samples.clear()
-        self.bl_samples.clear()
-
-    def perform_tare(self):
-        """
-        Public slot to be called to perform the "zeroing" (tare) operation.
-        Emits tare_complete(bool) signal when done.
-        """
-        # --- REMOVED: Reset auto-tare timer ---
-        # self.drift_timer_start = None 
         
-        if not self.device:
-            self.tare_complete.emit(False)
-            return
-
-        self.is_tared = False
-        self._clear_samples() # Clear old samples
-        samples = [[], [], [], []]
-        
-        start_time = time.time()
-        while (time.time() - start_time) < self.TARE_DURATION and self.running:
-            data = self.device.read(64, timeout_ms=self.READ_TIMEOUT_MS)
-            if not data:
-                continue
-            
-            sensor_data = self._parse_sensor_data(data)
-            if sensor_data:
-                for i in range(4):
-                    samples[i].append(sensor_data[i])
-        
-        if not samples[0]:
-            self.is_tared = False
-            self.tare_complete.emit(False)
-            return
-
-        self.zero_point = [sum(s) / len(s) for s in samples]
-        self.is_tared = True
-        self.tare_complete.emit(True)
-
     def start_processing_loop(self):
         """
-        The main loop for the thread. Connects, calibrates, and then
-        enters the weighing loop, emitting data signals.
+        NEW: This is the main processing loop that the QThread will run.
         """
         try:
             # --- 1. Connect ---
             self.status_update.emit("Connecting to Wii Balance Board...")
             if not self._connect():
-                self.error_occurred.emit("❌ Connection failed. Please restart.")
                 return
             
             # --- 2. Set LED ---
             self.status_update.emit("Connected. Setting LED...")
-            self._set_led(True)
+            self._set_led(True) # Turn on the solid blue light
             
             # --- 3. Calibrate ---
             self.status_update.emit("Reading calibration data...")
             if not self._read_calibration():
-                self.error_occurred.emit("❌ Failed to read calibration. Please restart.")
                 return
 
             # --- 4. Set Mode ---
             self.status_update.emit("Setting data mode...")
             if not self._set_data_mode():
-                self.error_occurred.emit("❌ Failed to set data mode. Please restart.")
                 return
             
             # --- 5. Ready to Tare ---
-            self.status_update.emit("Board ready. Click 'Tare (Zero)' to begin.")
+            self.status_update.emit("Board ready. Click 'Tare (Zero)' or press board button.")
             self.ready_to_tare.emit()
 
             # --- 6. Weighing Loop ---
@@ -293,17 +289,9 @@ class WiiBalanceBoard(QObject):
                     if not data:
                         continue
                     
-                    # --- NEW: Button Press Detection ---
-                    if data[0] == 0x32:
-                        button_byte = data[2]
-                        current_button_state = (button_byte & 0x04) != 0 # 0x04 is the power button
-                        
-                        if current_button_state and not self.prev_button_state:
-                            # Button was just pressed
-                            self.board_button_pressed.emit()
-                        
-                        self.prev_button_state = current_button_state
-                    # --- End Button Press Detection ---
+                    # --- REMOVED: Button Press Detection ---
+                    # if data[0] in (0x30, 0x31, 0x32, 0x34, 0x35, 0x36, 0x37):
+                    #     ...
                     
                     sensor_data = self._parse_sensor_data(data)
                     if sensor_data:
@@ -314,6 +302,8 @@ class WiiBalanceBoard(QObject):
                         self.tl_samples.append(raw_weights_kg[2])
                         self.bl_samples.append(raw_weights_kg[3])
                         
+                        if not self.tr_samples: continue # Wait for buffers to fill
+
                         averaged_weights = [
                             sum(self.tr_samples) / len(self.tr_samples),
                             sum(self.br_samples) / len(self.br_samples),
@@ -324,10 +314,6 @@ class WiiBalanceBoard(QObject):
                         processed_data = self._get_processed_data(averaged_weights)
                         self.data_received.emit(processed_data)
                         
-                        # --- REMOVED: Auto-Tare Logic Block ---
-                        # current_time = time.time()
-                        # if (current_time - self.last_auto_tare_check) > 1.0:
-                        # ...
                 else:
                     # Sleep if not tared to prevent busy-looping
                     time.sleep(0.1)

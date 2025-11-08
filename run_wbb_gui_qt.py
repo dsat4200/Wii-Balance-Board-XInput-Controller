@@ -20,7 +20,7 @@ class ButtonIndicator(QWidget):
         super().__init__()
         self.label = label_text
         self.is_active = False
-        self.setFixedSize(50, 50) # Fixed size for the circle
+        self.setFixedSize(40, 40) # MODIFIED: Was 50x50
 
         self.active_color = QColor(220, 0, 0)
         self.inactive_color = QColor(200, 200, 200)
@@ -48,7 +48,7 @@ class ButtonIndicator(QWidget):
         
         # Draw label text
         painter.setPen(Qt.GlobalColor.black)
-        font = QFont("Helvetica", 12, QFont.Weight.Bold)
+        font = QFont("Helvetica", 11, QFont.Weight.Bold) # MODIFIED: Was 12
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.label)
 
@@ -82,7 +82,7 @@ class CoMWidget(QGraphicsView):
         self.scene.addLine(0, -100, 0, 100, QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)).setZValue(-5)
         
         # Draw labels
-        font = QFont("Helvetica", 9)
+        font = QFont("Helvetica", 8) # MODIFIED: Was 9
         top_label = self.scene.addText("Top (+Y)", font)
         top_label.setPos(-top_label.boundingRect().width() / 2, -100)
         
@@ -199,19 +199,19 @@ class BalanceBoardApp(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("Wii Balance Board Monitor (PyQt6)")
-        self.setGeometry(100, 100, 450, 800) # Made window taller
+        self.setGeometry(100, 100, 420, 700) # MODIFIED: Was 450x800
         
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
+        main_layout.setContentsMargins(15, 15, 15, 15) # MODIFIED: Was 20
+        main_layout.setSpacing(10) # MODIFIED: Was 15
         
         # --- Total Weight ---
         total_weight_header = QLabel("Total Weight")
-        total_weight_header.setFont(QFont("Helvetica", 16, QFont.Weight.Bold))
+        total_weight_header.setFont(QFont("Helvetica", 15, QFont.Weight.Bold)) # MODIFIED: Was 16
         total_weight_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.total_weight_label = QLabel("--.- kg")
-        self.total_weight_label.setFont(QFont("Helvetica", 28, QFont.Weight.Bold))
+        self.total_weight_label.setFont(QFont("Helvetica", 26, QFont.Weight.Bold)) # MODIFIED: Was 28
         self.total_weight_label.setStyleSheet("color: #007ACC;")
         self.total_weight_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -226,8 +226,8 @@ class BalanceBoardApp(QWidget):
         self.br_label = QLabel("BR: --.- kg")
         
         for label in [self.tl_label, self.tr_label, self.bl_label, self.br_label]:
-            label.setFont(QFont("Helvetica", 12))
-            label.setMinimumWidth(100)
+            label.setFont(QFont("Helvetica", 11)) # MODIFIED: Was 12
+            # label.setMinimumWidth(100) # REMOVED
 
         v_layout_left = QVBoxLayout()
         v_layout_left.addWidget(self.tl_label)
@@ -242,7 +242,7 @@ class BalanceBoardApp(QWidget):
 
         # --- NEW: Button Indicators ---
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(15)
+        button_layout.setSpacing(10) # MODIFIED: Was 15
         self.button_a = ButtonIndicator("A") # TL
         self.button_b = ButtonIndicator("B") # BL
         self.button_x = ButtonIndicator("X") # TR
@@ -258,7 +258,7 @@ class BalanceBoardApp(QWidget):
 
         # --- Center of Mass ---
         com_header = QLabel("Center of Mass")
-        com_header.setFont(QFont("Helvetica", 16, QFont.Weight.Bold))
+        com_header.setFont(QFont("Helvetica", 15, QFont.Weight.Bold)) # MODIFIED: Was 16
         com_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.com_widget = CoMWidget()
@@ -274,8 +274,8 @@ class BalanceBoardApp(QWidget):
         threshold_frame = QFrame()
         threshold_frame.setFrameShape(QFrame.Shape.StyledPanel)
         threshold_layout = QGridLayout(threshold_frame)
-        threshold_layout.setSpacing(10)
-        threshold_layout.setContentsMargins(10, 10, 10, 10)
+        threshold_layout.setSpacing(8) # MODIFIED: Was 10
+        threshold_layout.setContentsMargins(8, 8, 8, 8) # MODIFIED: Was 10
 
         # Create spinners
         self.spin_tl = QDoubleSpinBox(decimals=1, minimum=0.1, maximum=100.0, singleStep=0.5, suffix=" kg")
@@ -295,21 +295,27 @@ class BalanceBoardApp(QWidget):
         self.spin_tr.valueChanged.connect(lambda v: self.on_threshold_changed("top_right", v))
         self.spin_br.valueChanged.connect(lambda v: self.on_threshold_changed("bottom_right", v))
 
+        # Helper for creating labels
+        def create_threshold_label(text):
+            lbl = QLabel(text)
+            lbl.setFont(QFont("Helvetica", 10)) # Set smaller font
+            return lbl
+
         # Add to layout
-        threshold_layout.addWidget(QLabel("A (Top-Left):"), 0, 0)
+        threshold_layout.addWidget(create_threshold_label("A (Top-Left):"), 0, 0)
         threshold_layout.addWidget(self.spin_tl, 0, 1)
-        threshold_layout.addWidget(QLabel("B (Bottom-Left):"), 1, 0)
+        threshold_layout.addWidget(create_threshold_label("B (Bottom-Left):"), 1, 0)
         threshold_layout.addWidget(self.spin_bl, 1, 1)
-        threshold_layout.addWidget(QLabel("X (Top-Right):"), 0, 2)
+        threshold_layout.addWidget(create_threshold_label("X (Top-Right):"), 0, 2)
         threshold_layout.addWidget(self.spin_tr, 0, 3)
-        threshold_layout.addWidget(QLabel("Y (Bottom-Right):"), 1, 2)
+        threshold_layout.addWidget(create_threshold_label("Y (Bottom-Right):"), 1, 2)
         threshold_layout.addWidget(self.spin_br, 1, 3)
 
         # --- Tare Button ---
         self.tare_button = QPushButton("Tare (Zero)")
-        self.tare_button.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
+        self.tare_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold)) # MODIFIED: Was 12
         self.tare_button.setEnabled(False)
-        self.tare_button.setMinimumHeight(40)
+        self.tare_button.setMinimumHeight(35) # MODIFIED: Was 40
         
         # --- Status Bar ---
         self.status_label = QLabel("Initializing...")
@@ -320,12 +326,14 @@ class BalanceBoardApp(QWidget):
         main_layout.addWidget(total_weight_header)
         main_layout.addWidget(self.total_weight_label)
         main_layout.addWidget(quad_frame)
-        main_layout.addSpacing(10)
+        main_layout.addSpacing(5) # MODIFIED: Was 10
         main_layout.addWidget(com_header)
         main_layout.addLayout(button_layout) # Add buttons
         main_layout.addLayout(com_widget_layout) # Add CoM graph
-        main_layout.addSpacing(10)
-        main_layout.addWidget(QLabel("Button Thresholds:"))
+        main_layout.addSpacing(5) # MODIFIED: Was 10
+        threshold_label = QLabel("Button Thresholds:")
+        threshold_label.setFont(QFont("Helvetica", 10, QFont.Weight.Bold)) # Added smaller font
+        main_layout.addWidget(threshold_label)
         main_layout.addWidget(threshold_frame) # Add threshold controls
         main_layout.addStretch()
         main_layout.addWidget(self.tare_button)
@@ -345,8 +353,8 @@ class BalanceBoardApp(QWidget):
         self.board.ready_to_tare.connect(lambda: self.tare_button.setEnabled(True))
         self.board.tare_complete.connect(self.on_tare_complete)
         
-        # --- NEW: Connect board button press to a new slot ---
-        self.board.board_button_pressed.connect(self.on_board_button_tare)
+        # --- REMOVED ---
+        # self.board.board_button_pressed.connect(self.on_board_button_tare)
         
         self.processing_thread.started.connect(self.board.start_processing_loop)
         self.processing_thread.finished.connect(self.processing_thread.deleteLater)
@@ -396,15 +404,15 @@ class BalanceBoardApp(QWidget):
         self.tare_button.setEnabled(False)
         self.board.perform_tare() 
 
-    # --- NEW: Slot for board button press ---
-    def on_board_button_tare(self):
-        """
-        Slot for when the board's power button is pressed.
-        Triggers a tare if one isn't already in progress.
-        """
-        if self.tare_button.isEnabled():
-            self.set_status("🔵 Tare triggered from board button.")
-            self.on_tare_click() # Call the existing tare function
+    # --- REMOVED ---
+    # def on_board_button_tare(self):
+    #     """
+    #     Slot for when the board's power button is pressed.
+    #     ...
+    #     """
+    #     if self.tare_button.isEnabled():
+    #         self.set_status("🔵 Tare triggered from board button.")
+    #         self.on_tare_click() # Call the existing tare function
 
     def on_tare_complete(self, success):
         """Slot for when the board signals tare is complete."""
