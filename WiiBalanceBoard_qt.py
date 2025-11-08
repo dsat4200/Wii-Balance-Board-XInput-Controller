@@ -31,6 +31,8 @@ class WiiBalanceBoard(QObject):
     tare_complete = pyqtSignal(bool)
     # Emits critical errors
     error_occurred = pyqtSignal(str)
+    # --- NEW: Emits when the board's power button is pressed ---
+    board_button_pressed = pyqtSignal()
     # Signal emitted when the processing loop is truly finished
     finished = pyqtSignal()
 
@@ -49,14 +51,15 @@ class WiiBalanceBoard(QObject):
         
         # --- MODIFIED: Load new auto-tare and dead zone settings ---
         self.dead_zone_kg = config.get("dead_zone_kg", 0.2)
-        self.auto_tare_drift_multiplier = config.get("auto_tare_drift_multiplier", 2.0)
-        self.auto_tare_drift_sec = config.get("auto_tare_drift_sec", 5.0)
         
-        # --- MODIFIED: Timer for auto-tare (renamed for clarity) ---
-        self.drift_timer_start = None # Timestamp of when weight first entered the drift range
+        # --- REMOVED: Auto-tare variables ---
+        # self.auto_tare_drift_multiplier = config.get(...)
+        # self.auto_tare_drift_sec = config.get(...)
+        # self.drift_timer_start = None
+        # self.last_auto_tare_check = time.time()
         
-        # --- NEW: Timer for auto-tare check frequency ---
-        self.last_auto_tare_check = time.time()
+        # --- NEW: For button press detection ---
+        self.prev_button_state = False
         
         # --- For smoothing ---
         self.tr_samples = deque(maxlen=self.averaging_samples)
@@ -220,8 +223,8 @@ class WiiBalanceBoard(QObject):
         Public slot to be called to perform the "zeroing" (tare) operation.
         Emits tare_complete(bool) signal when done.
         """
-        # Reset auto-tare timer whenever a tare starts
-        self.drift_timer_start = None 
+        # --- REMOVED: Reset auto-tare timer ---
+        # self.drift_timer_start = None 
         
         if not self.device:
             self.tare_complete.emit(False)
@@ -290,6 +293,18 @@ class WiiBalanceBoard(QObject):
                     if not data:
                         continue
                     
+                    # --- NEW: Button Press Detection ---
+                    if data[0] == 0x32:
+                        button_byte = data[2]
+                        current_button_state = (button_byte & 0x04) != 0 # 0x04 is the power button
+                        
+                        if current_button_state and not self.prev_button_state:
+                            # Button was just pressed
+                            self.board_button_pressed.emit()
+                        
+                        self.prev_button_state = current_button_state
+                    # --- End Button Press Detection ---
+                    
                     sensor_data = self._parse_sensor_data(data)
                     if sensor_data:
                         # --- Smoothing ---
@@ -309,31 +324,10 @@ class WiiBalanceBoard(QObject):
                         processed_data = self._get_processed_data(averaged_weights)
                         self.data_received.emit(processed_data)
                         
-                        # --- MODIFIED: New Auto-Tare Logic (with 1-second check) ---
-                        
-                        current_time = time.time()
-                        if (current_time - self.last_auto_tare_check) > 1.0:
-                            # Only run this check once per second
-                            self.last_auto_tare_check = current_time
-                            
-                            total_weight = processed_data['total_kg']
-                            drift_upper_limit = self.dead_zone_kg * self.auto_tare_drift_multiplier
-
-                            if self.dead_zone_kg < total_weight < drift_upper_limit:
-                                # Weight is in the "drift" range (e.g., 0.2kg < weight < 0.4kg)
-                                if self.drift_timer_start is None:
-                                    # Start the timer
-                                    self.drift_timer_start = time.time()
-                                else:
-                                    # Timer is running, check if it expired
-                                    elapsed = time.time() - self.drift_timer_start
-                                    if elapsed > self.auto_tare_drift_sec:
-                                        self.status_update.emit("Auto-taring to correct drift...")
-                                        self.perform_tare() 
-                                        # perform_tare() resets the timer
-                            else:
-                                # Weight is either 0 (good) or high (in use), so reset the timer
-                                self.drift_timer_start = None
+                        # --- REMOVED: Auto-Tare Logic Block ---
+                        # current_time = time.time()
+                        # if (current_time - self.last_auto_tare_check) > 1.0:
+                        # ...
                 else:
                     # Sleep if not tared to prevent busy-looping
                     time.sleep(0.1)

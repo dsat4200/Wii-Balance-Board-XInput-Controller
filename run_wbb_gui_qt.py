@@ -345,6 +345,9 @@ class BalanceBoardApp(QWidget):
         self.board.ready_to_tare.connect(lambda: self.tare_button.setEnabled(True))
         self.board.tare_complete.connect(self.on_tare_complete)
         
+        # --- NEW: Connect board button press to a new slot ---
+        self.board.board_button_pressed.connect(self.on_board_button_tare)
+        
         self.processing_thread.started.connect(self.board.start_processing_loop)
         self.processing_thread.finished.connect(self.processing_thread.deleteLater)
         self.board.finished.connect(self.processing_thread.quit)
@@ -392,6 +395,16 @@ class BalanceBoardApp(QWidget):
         self.set_status("🔵 Taring... Please step OFF the board.")
         self.tare_button.setEnabled(False)
         self.board.perform_tare() 
+
+    # --- NEW: Slot for board button press ---
+    def on_board_button_tare(self):
+        """
+        Slot for when the board's power button is pressed.
+        Triggers a tare if one isn't already in progress.
+        """
+        if self.tare_button.isEnabled():
+            self.set_status("🔵 Tare triggered from board button.")
+            self.on_tare_click() # Call the existing tare function
 
     def on_tare_complete(self, success):
         """Slot for when the board signals tare is complete."""
