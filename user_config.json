@@ -4,10 +4,10 @@
     "averaging_samples": 4,
     "dead_zone_kg": 0.2,
     "button_thresholds_kg": {
-        "top_left": 12.0,
-        "bottom_left": 12.0,
-        "top_right": 12.0,
-        "bottom_right": 12.0
+        "top_left": 5.0,
+        "bottom_left": 5.0,
+        "top_right": 5.0,
+        "bottom_right": 5.0
     },
     "button_mappings": {
         "top_left": "XUSB_GAMEPAD_A",
@@ -22,5 +22,6 @@
         "top_right_bottom_right": "None",
         "top_left_bottom_right": "None",
         "top_right_bottom_left": "None"
-    }
+    },
+    "theme": "dark"
 }

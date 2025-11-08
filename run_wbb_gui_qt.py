@@ -12,6 +12,125 @@ from PyQt6.QtGui import (
 )
 from WiiBalanceBoard_qt import WiiBalanceBoard # Import the Qt-enabled API
 
+# --- STYLESHEETS ---
+
+DARK_STYLESHEET = """
+QWidget {
+    background-color: #282a36;
+    color: #f8f8f2;
+}
+QPushButton {
+    background-color: #44475a;
+    border: 1px solid #6272a4;
+    padding: 5px;
+    border-radius: 3px;
+}
+QPushButton:hover {
+    background-color: #4f5368;
+}
+QPushButton:pressed {
+    background-color: #3b3e51;
+}
+QPushButton:disabled {
+    background-color: #3b3e51;
+    color: #6272a4;
+}
+QFrame {
+    border: 1px solid #44475a;
+    border-radius: 4px;
+}
+QComboBox {
+    background-color: #44475a;
+    border: 1px solid #6272a4;
+    border-radius: 3px;
+    padding: 3px;
+}
+QComboBox::drop-down {
+    border-left: 1px solid #6272a4;
+}
+QComboBox QAbstractItemView {
+    background-color: #44475a;
+    border: 1px solid #6272a4;
+    selection-background-color: #6272a4;
+}
+QDoubleSpinBox {
+    background-color: #44475a;
+    border: 1px solid #6272a4;
+    border-radius: 3px;
+    padding: 3px;
+}
+QLabel {
+    background-color: transparent;
+    border: none;
+}
+#total_weight_label {
+    color: #50fa7b;
+}
+#status_label {
+    color: #bd93f9;
+    border-top: 1px solid #44475a;
+}
+"""
+
+LIGHT_STYLESHEET = """
+QWidget {
+    background-color: #f0f0f0;
+    color: #000000;
+}
+QPushButton {
+    background-color: #e1e1e1;
+    border: 1px solid #adadad;
+    padding: 5px;
+    border-radius: 3px;
+}
+QPushButton:hover {
+    background-color: #cacaca;
+}
+QPushButton:pressed {
+    background-color: #b0b0b0;
+}
+QPushButton:disabled {
+    background-color: #dcdcdc;
+    color: #888888;
+}
+QFrame {
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+}
+QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #adadad;
+    border-radius: 3px;
+    padding: 3px;
+}
+QComboBox::drop-down {
+    border-left: 1px solid #adadad;
+}
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    border: 1px solid #adadad;
+    selection-background-color: #d3d3d3;
+}
+QDoubleSpinBox {
+    background-color: #ffffff;
+    border: 1px solid #adadad;
+    border-radius: 3px;
+    padding: 3px;
+}
+QLabel {
+    background-color: transparent;
+    border: none;
+}
+#total_weight_label {
+    color: #007ACC;
+}
+#status_label {
+    color: #000000;
+    border-top: 1px solid #CCC;
+}
+"""
+
+
 class CoMWidget(QGraphicsView):
     """
     A custom widget to display the Center of Mass,
@@ -24,7 +143,6 @@ class CoMWidget(QGraphicsView):
         self.scene.setSceneRect(-100, -100, 200, 200)
         self.setFixedSize(202, 202)
         
-        self.setBackgroundBrush(QColor(255, 255, 255))
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
@@ -34,18 +152,35 @@ class CoMWidget(QGraphicsView):
         self.active_pressure_brush = QBrush(QColor(220, 0, 0, 120)) # Red
         self.active_pressure_pen = QPen(QColor(220, 0, 0, 180), 1) # Red
 
+        # --- Theme-aware colors ---
+        self.bg_color = QColor(255, 255, 255)
+        self.grid_pen = QPen(QColor(230, 230, 230), 1, Qt.PenStyle.SolidLine)
+        self.axis_pen = QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)
+        self.label_font_color = QColor(0, 0, 0)
+        self.thresh_pen = QPen(QColor(100, 100, 100), 1, Qt.PenStyle.DashLine)
+        
+        self.setBackgroundBrush(self.bg_color)
+        
+        # --- Store scene items to update colors ---
+        self.grid_lines = []
+        self.axis_lines = []
+        self.text_items = []
+        
         # --- Draw grid lines (axes) ---
-        grid_pen = QPen(QColor(230, 230, 230), 1, Qt.PenStyle.SolidLine)
-        grid_pen.setCosmetic(True) # Keep it 1px
+        self.grid_pen.setCosmetic(True) # Keep it 1px
         for i in range(-10, 11):
             if i == 0: continue # Main crosshairs will draw over this
             coord = i * 10 # e.g., -90, -80... 80, 90
-            self.scene.addLine(-100, coord, 100, coord, grid_pen).setZValue(-10)
-            self.scene.addLine(coord, -100, coord, 100, grid_pen).setZValue(-10)
+            self.grid_lines.append(self.scene.addLine(-100, coord, 100, coord, self.grid_pen))
+            self.grid_lines.append(self.scene.addLine(coord, -100, coord, 100, self.grid_pen))
+            self.grid_lines[-1].setZValue(-10)
+            self.grid_lines[-2].setZValue(-10)
 
         # Draw main crosshairs (on top of grid)
-        self.scene.addLine(-100, 0, 100, 0, QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)).setZValue(-5)
-        self.scene.addLine(0, -100, 0, 100, QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)).setZValue(-5)
+        self.axis_lines.append(self.scene.addLine(-100, 0, 100, 0, self.axis_pen))
+        self.axis_lines.append(self.scene.addLine(0, -100, 0, 100, self.axis_pen))
+        self.axis_lines[0].setZValue(-5)
+        self.axis_lines[1].setZValue(-5)
         
         # Draw labels
         font = QFont("Helvetica", 8)
@@ -60,6 +195,8 @@ class CoMWidget(QGraphicsView):
         
         right_label = self.scene.addText("R\n(+X)", font)
         right_label.setPos(98 - right_label.boundingRect().width(), -right_label.boundingRect().height() / 2)
+        
+        self.text_items.extend([top_label, bottom_label, left_label, right_label])
         
         # --- Create pressure dots ---
         min_r = self._map_weight_to_radius(0)
@@ -77,24 +214,22 @@ class CoMWidget(QGraphicsView):
         self.br_dot.setPos(90, 90); self.br_dot.setZValue(5)
 
         # --- Create threshold indicators ---
-        thresh_pen = QPen(QColor(100, 100, 100), 1, Qt.PenStyle.DashLine)
-        thresh_pen.setCosmetic(True)
+        self.thresh_pen.setCosmetic(True)
         thresh_brush = QBrush(Qt.BrushStyle.NoBrush)
         
-        self.tl_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.tl_thresh = self.scene.addEllipse(0, 0, 0, 0, self.thresh_pen, thresh_brush)
         self.tl_thresh.setPos(-90, -90); self.tl_thresh.setZValue(3)
 
-        self.tr_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.tr_thresh = self.scene.addEllipse(0, 0, 0, 0, self.thresh_pen, thresh_brush)
         self.tr_thresh.setPos(90, -90); self.tr_thresh.setZValue(3)
 
-        self.bl_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.bl_thresh = self.scene.addEllipse(0, 0, 0, 0, self.thresh_pen, thresh_brush)
         self.bl_thresh.setPos(-90, 90); self.bl_thresh.setZValue(3)
 
-        self.br_thresh = self.scene.addEllipse(0, 0, 0, 0, thresh_pen, thresh_brush)
+        self.br_thresh = self.scene.addEllipse(0, 0, 0, 0, self.thresh_pen, thresh_brush)
         self.br_thresh.setPos(90, 90); self.br_thresh.setZValue(3)
 
         # --- Add Button labels ---
-        # UPDATED: Font size is larger, text is now set dynamically
         self.label_font = QFont("Helvetica", 16, QFont.Weight.Bold)
         
         def create_button_label(text, pos_x, pos_y):
@@ -105,7 +240,6 @@ class CoMWidget(QGraphicsView):
             label.setZValue(6) 
             return label
 
-        # UPDATED: Create blank labels, to be populated by main app
         self.tl_label = create_button_label("", -90, -90)
         self.bl_label = create_button_label("", -90, 90)
         self.tr_label = create_button_label("", 90, -90)
@@ -119,6 +253,40 @@ class CoMWidget(QGraphicsView):
         self.scene.addItem(self.com_dot)
         
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    def set_theme(self, is_dark_mode):
+        """NEW: Updates the internal drawing colors for the scene."""
+        if is_dark_mode:
+            self.bg_color = QColor("#282a36")
+            self.grid_pen = QPen(QColor("#44475a"), 1, Qt.PenStyle.SolidLine)
+            self.axis_pen = QPen(QColor("#6272a4"), 1, Qt.PenStyle.DashLine)
+            self.label_font_color = QColor("#f8f8f2")
+            self.thresh_pen = QPen(QColor("#bd93f9"), 1, Qt.PenStyle.DashLine)
+        else:
+            self.bg_color = QColor(255, 255, 255)
+            self.grid_pen = QPen(QColor(230, 230, 230), 1, Qt.PenStyle.SolidLine)
+            self.axis_pen = QPen(Qt.GlobalColor.lightGray, 1, Qt.PenStyle.DashLine)
+            self.label_font_color = QColor(0, 0, 0)
+            self.thresh_pen = QPen(QColor(100, 100, 100), 1, Qt.PenStyle.DashLine)
+            
+        self.grid_pen.setCosmetic(True)
+        self.thresh_pen.setCosmetic(True)
+
+        self.setBackgroundBrush(self.bg_color)
+        
+        for item in self.grid_lines:
+            item.setPen(self.grid_pen)
+        
+        for item in self.axis_lines:
+            item.setPen(self.axis_pen)
+            
+        for item in self.text_items:
+            item.setDefaultTextColor(self.label_font_color)
+            
+        self.tl_thresh.setPen(self.thresh_pen)
+        self.tr_thresh.setPen(self.thresh_pen)
+        self.bl_thresh.setPen(self.thresh_pen)
+        self.br_thresh.setPen(self.thresh_pen)
 
     def _map_weight_to_radius(self, weight):
         """Helper to map a weight (kg) to a circle radius (px)."""
@@ -333,10 +501,17 @@ class BalanceBoardApp(QWidget):
         # --- Track visual button state ---
         self.button_view_mode = "xbox"
         
+        # --- NEW: Track theme state ---
+        self.is_dark_mode = self.config.get("theme", "light") == "dark"
+        
+        # --- NEW: Board/Thread placeholders ---
+        self.processing_thread = None
+        self.board = None
+        
         self.init_ui()
-        # --- NEW: Set initial labels on CoM widget ---
+        self.apply_theme() # Apply loaded theme on startup
         self.update_all_com_labels()
-        self.init_board()
+        self._create_and_start_thread() # Start the board connection
         
         # --- Initialize virtual gamepad ---
         try:
@@ -350,7 +525,7 @@ class BalanceBoardApp(QWidget):
     def init_ui(self):
         self.setWindowTitle("Wii Balance Board Monitor (PyQt6)")
         # Adjusted height for new controls
-        self.setGeometry(100, 100, 420, 950) # Increased height for combo box
+        self.setGeometry(100, 100, 420, 990) # Increased height for new buttons
         
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(15, 15, 15, 15)
@@ -362,8 +537,9 @@ class BalanceBoardApp(QWidget):
         total_weight_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.total_weight_label = QLabel("--.- kg")
+        self.total_weight_label.setObjectName("total_weight_label") # Set object name for QSS
         self.total_weight_label.setFont(QFont("Helvetica", 26, QFont.Weight.Bold))
-        self.total_weight_label.setStyleSheet("color: #007ACC;")
+        self.total_weight_label.setStyleSheet("color: #007ACC;") # Default
         self.total_weight_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # --- Quadrant Labels ---
@@ -542,26 +718,38 @@ class BalanceBoardApp(QWidget):
         combo_mapping_layout.addWidget(create_mapping_label("Top-Right + Bottom-Left:"), 6, 0)
         combo_mapping_layout.addWidget(self.combo_tr_bl, 6, 1)
 
-        # --- Tare Button ---
+        # --- Control Buttons ---
         self.tare_button = QPushButton("Tare (Zero)")
         self.tare_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
         self.tare_button.setEnabled(False)
         self.tare_button.setMinimumHeight(35)
         
-        # --- NEW: Save Config Button ---
         self.save_button = QPushButton("Save Config")
         self.save_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
         self.save_button.setMinimumHeight(35)
         
+        self.rescan_button = QPushButton("Rescan for Board")
+        self.rescan_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
+        self.rescan_button.setMinimumHeight(35)
+        
+        self.toggle_theme_button = QPushButton("Toggle Dark Mode")
+        self.toggle_theme_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
+        self.toggle_theme_button.setMinimumHeight(35)
+
         # --- Button Layout ---
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.tare_button)
-        button_layout.addWidget(self.save_button)
+        button_layout_1 = QHBoxLayout()
+        button_layout_1.addWidget(self.tare_button)
+        button_layout_1.addWidget(self.save_button)
+        
+        button_layout_2 = QHBoxLayout()
+        button_layout_2.addWidget(self.rescan_button)
+        button_layout_2.addWidget(self.toggle_theme_button)
         
         # --- Status Bar ---
         self.status_label = QLabel("Initializing...")
+        self.status_label.setObjectName("status_label") # Set object name for QSS
         self.status_label.setFont(QFont("Helvetica", 10))
-        self.status_label.setStyleSheet("border-top: 1px solid #CCC; padding: 5px;")
+        self.status_label.setStyleSheet("border-top: 1px solid #CCC; padding: 5px;") # Default
         
         # --- Add widgets to main layout ---
         main_layout.addWidget(total_weight_header)
@@ -575,35 +763,85 @@ class BalanceBoardApp(QWidget):
         main_layout.addWidget(mapping_frame) # Add mapping controls
         main_layout.addWidget(combo_mapping_frame) # NEW: Add combo mapping controls
         main_layout.addStretch()
-        main_layout.addLayout(button_layout) # Replaced tare_button with layout
+        main_layout.addLayout(button_layout_1) # Add button row 1
+        main_layout.addLayout(button_layout_2) # Add button row 2
         main_layout.addWidget(self.status_label)
+        
+        # --- Connect button signals ---
+        self.tare_button.clicked.connect(self.on_tare_click)
+        self.save_button.clicked.connect(self.save_config)
+        self.rescan_button.clicked.connect(self.on_rescan_click)
+        self.toggle_theme_button.clicked.connect(self.on_toggle_theme)
 
-    def init_board(self):
-        """Create the thread and the board worker object."""
+    def _create_and_start_thread(self):
+        """
+        NEW: Creates and starts a new board worker and thread.
+        This is now the single point of entry for starting/restarting the connection.
+        """
+        # Disconnect old slot if it exists, to prevent multiple connections
+        if self.processing_thread:
+             self.processing_thread.finished.disconnect(self._create_and_start_thread)
+
         self.processing_thread = QThread()
         self.board = WiiBalanceBoard(self.config)
         
         self.board.moveToThread(self.processing_thread)
         
+        # Connect signals
         self.board.data_received.connect(self.update_gui)
         self.board.status_update.connect(self.set_status)
         self.board.error_occurred.connect(self.handle_error)
         
         self.board.ready_to_tare.connect(lambda: self.tare_button.setEnabled(True))
+        self.board.ready_to_tare.connect(lambda: self.rescan_button.setEnabled(True)) # Re-enable rescan
         self.board.tare_complete.connect(self.on_tare_complete)
         
+        # Thread lifetime management
         self.processing_thread.started.connect(self.board.start_processing_loop)
-        self.processing_thread.finished.connect(self.processing_thread.deleteLater)
-        self.board.finished.connect(self.processing_thread.quit)
-        
-        self.tare_button.clicked.connect(self.on_tare_click)
-        # --- NEW: Connect save button ---
-        self.save_button.clicked.connect(self.save_config)
+        self.board.finished.connect(self.processing_thread.quit) # Tell thread to quit when worker is done
+        self.board.finished.connect(self.board.deleteLater) # Schedule worker for deletion
+        self.processing_thread.finished.connect(self.processing_thread.deleteLater) # Schedule thread for deletion
         
         self.processing_thread.start()
+        self.rescan_button.setEnabled(True) # Allow scanning even if it fails
 
     # --- GUI Slots ---
     
+    def on_rescan_click(self):
+        """
+        NEW: Safely stops the current board thread and starts a new scan.
+        """
+        self.set_status("Rescanning...")
+        self.tare_button.setEnabled(False)
+        self.rescan_button.setEnabled(False) # Disable to prevent spamming
+        
+        if self.processing_thread and self.processing_thread.isRunning():
+            # Connect the thread's finished signal to start a new scan
+            self.processing_thread.finished.connect(self._create_and_start_thread, Qt.ConnectionType.SingleShotConnection)
+            # Tell the worker to stop, which will emit 'finished' and stop the thread
+            self.board.stop_processing()
+        else:
+            # No thread running, just start a new one
+            self._create_and_start_thread()
+
+    def on_toggle_theme(self):
+        """NEW: Toggles the application's theme."""
+        self.is_dark_mode = not self.is_dark_mode
+        self.config["theme"] = "dark" if self.is_dark_mode else "light"
+        self.apply_theme()
+
+    def apply_theme(self):
+        """NEW: Applies the currently selected theme."""
+        if self.is_dark_mode:
+            self.setStyleSheet(DARK_STYLESHEET)
+            self.toggle_theme_button.setText("Toggle Light Mode")
+        else:
+            self.setStyleSheet(LIGHT_STYLESHEET)
+            self.toggle_theme_button.setText("Toggle Dark Mode")
+        
+        # Update the CoM widget's theme
+        self.com_widget.set_theme(self.is_dark_mode)
+
     def update_all_com_labels(self):
         """
         NEW: Updates all four labels on the CoM widget based on the current
@@ -799,6 +1037,7 @@ class BalanceBoardApp(QWidget):
         """Slot to show an error. Disables tare button."""
         self.set_status(text)
         self.tare_button.setEnabled(False)
+        self.rescan_button.setEnabled(True) # Allow user to rescan on error
 
     def on_tare_click(self):
         """Slot for when the tare button is clicked."""
@@ -819,8 +1058,8 @@ class BalanceBoardApp(QWidget):
         print("Saving user_config.json...")
         self.config["button_thresholds_kg"] = self.thresholds
         self.config["button_mappings"] = self.button_mappings
-        # --- NEW: Save combo mappings ---
         self.config["combination_mappings"] = self.combination_mappings
+        self.config["theme"] = "dark" if self.is_dark_mode else "light"
         
         try:
             with open("user_config.json", "w") as f:
@@ -838,7 +1077,7 @@ class BalanceBoardApp(QWidget):
         # --- REMOVED: save_config() ---
         # User must save manually now
         
-        if self.processing_thread.isRunning():
+        if self.processing_thread and self.processing_thread.isRunning():
             self.board.stop_processing()
             self.processing_thread.quit()
             self.processing_thread.wait(3000)
@@ -889,6 +1128,7 @@ def load_config():
             "polling_rate_hz": 30,
             "averaging_samples": 5,
             "dead_zone_kg": 0.2,
+            "theme": "light", # --- NEW ---
             "button_thresholds_kg": {
                 "top_left": 10.0, "bottom_left": 10.0,
                 "top_right": 10.0, "bottom_right": 10.0
