@@ -2,6 +2,7 @@ import hid
 import time
 import struct
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
+from collections import deque # Import deque for efficient rolling average
 
 # --- Constants ---
 NINTENDO_VID = 0x057e
@@ -44,6 +45,24 @@ class WiiBalanceBoard(QObject):
         # Load settings from config
         self.READ_TIMEOUT_MS = 20
         self.TARE_DURATION = config.get("tare_duration_sec", 3.0)
+        self.averaging_samples = config.get("averaging_samples", 5)
+        
+        # --- MODIFIED: Load new auto-tare and dead zone settings ---
+        self.dead_zone_kg = config.get("dead_zone_kg", 0.2)
+        self.auto_tare_drift_multiplier = config.get("auto_tare_drift_multiplier", 2.0)
+        self.auto_tare_drift_sec = config.get("auto_tare_drift_sec", 5.0)
+        
+        # --- MODIFIED: Timer for auto-tare (renamed for clarity) ---
+        self.drift_timer_start = None # Timestamp of when weight first entered the drift range
+        
+        # --- NEW: Timer for auto-tare check frequency ---
+        self.last_auto_tare_check = time.time()
+        
+        # --- For smoothing ---
+        self.tr_samples = deque(maxlen=self.averaging_samples)
+        self.br_samples = deque(maxlen=self.averaging_samples)
+        self.tl_samples = deque(maxlen=self.averaging_samples)
+        self.bl_samples = deque(maxlen=self.averaging_samples)
 
     def _connect(self):
         """Attempts to connect to the Balance Board."""
@@ -169,7 +188,8 @@ class WiiBalanceBoard(QObject):
         tr, br, tl, bl = weights
         total_kg = sum(weights)
         
-        if total_kg < 0.1:
+        # --- MODIFIED: Use dead_zone_kg from config ---
+        if total_kg < self.dead_zone_kg:
             total_kg = 0.0
             tr = br = tl = bl = 0.0
             x_pos, y_pos = 0.0, 0.0
@@ -188,16 +208,27 @@ class WiiBalanceBoard(QObject):
 
     # --- Public Slots ---
     
+    def _clear_samples(self):
+        """Helper to clear sample buffers, e.g., after taring."""
+        self.tr_samples.clear()
+        self.br_samples.clear()
+        self.tl_samples.clear()
+        self.bl_samples.clear()
+
     def perform_tare(self):
         """
         Public slot to be called to perform the "zeroing" (tare) operation.
         Emits tare_complete(bool) signal when done.
         """
+        # Reset auto-tare timer whenever a tare starts
+        self.drift_timer_start = None 
+        
         if not self.device:
             self.tare_complete.emit(False)
             return
 
         self.is_tared = False
+        self._clear_samples() # Clear old samples
         samples = [[], [], [], []]
         
         start_time = time.time()
@@ -261,9 +292,48 @@ class WiiBalanceBoard(QObject):
                     
                     sensor_data = self._parse_sensor_data(data)
                     if sensor_data:
-                        weights_kg = self._calculate_weights(sensor_data)
-                        processed_data = self._get_processed_data(weights_kg)
+                        # --- Smoothing ---
+                        raw_weights_kg = self._calculate_weights(sensor_data)
+                        self.tr_samples.append(raw_weights_kg[0])
+                        self.br_samples.append(raw_weights_kg[1])
+                        self.tl_samples.append(raw_weights_kg[2])
+                        self.bl_samples.append(raw_weights_kg[3])
+                        
+                        averaged_weights = [
+                            sum(self.tr_samples) / len(self.tr_samples),
+                            sum(self.br_samples) / len(self.br_samples),
+                            sum(self.tl_samples) / len(self.tl_samples),
+                            sum(self.bl_samples) / len(self.bl_samples)
+                        ]
+                        
+                        processed_data = self._get_processed_data(averaged_weights)
                         self.data_received.emit(processed_data)
+                        
+                        # --- MODIFIED: New Auto-Tare Logic (with 1-second check) ---
+                        
+                        current_time = time.time()
+                        if (current_time - self.last_auto_tare_check) > 1.0:
+                            # Only run this check once per second
+                            self.last_auto_tare_check = current_time
+                            
+                            total_weight = processed_data['total_kg']
+                            drift_upper_limit = self.dead_zone_kg * self.auto_tare_drift_multiplier
+
+                            if self.dead_zone_kg < total_weight < drift_upper_limit:
+                                # Weight is in the "drift" range (e.g., 0.2kg < weight < 0.4kg)
+                                if self.drift_timer_start is None:
+                                    # Start the timer
+                                    self.drift_timer_start = time.time()
+                                else:
+                                    # Timer is running, check if it expired
+                                    elapsed = time.time() - self.drift_timer_start
+                                    if elapsed > self.auto_tare_drift_sec:
+                                        self.status_update.emit("Auto-taring to correct drift...")
+                                        self.perform_tare() 
+                                        # perform_tare() resets the timer
+                            else:
+                                # Weight is either 0 (good) or high (in use), so reset the timer
+                                self.drift_timer_start = None
                 else:
                     # Sleep if not tared to prevent busy-looping
                     time.sleep(0.1)
