@@ -3,6 +3,7 @@
     "polling_rate_hz": 100,
     "averaging_samples": 4,
     "dead_zone_kg": 0.2,
+    "theme": "dark",
     "button_thresholds_kg": {
         "top_left": 4.0,
         "bottom_left": 4.0,
@@ -10,18 +11,17 @@
         "bottom_right": 4.0
     },
     "button_mappings": {
-        "top_left": "XUSB_GAMEPAD_A",
-        "bottom_left": "XUSB_GAMEPAD_B",
-        "top_right": "XUSB_GAMEPAD_X",
-        "bottom_right": "XUSB_GAMEPAD_Y"
+        "top_left": "XUSB_GAMEPAD_Y",
+        "bottom_left": "XUSB_GAMEPAD_X",
+        "top_right": "XUSB_GAMEPAD_B",
+        "bottom_right": "XUSB_GAMEPAD_A"
     },
     "combination_mappings": {
-        "top_left_top_right": "LS_LEFT",
-        "bottom_left_bottom_right": "LS_RIGHT",
+        "top_left_top_right": "LS_RIGHT",
+        "bottom_left_bottom_right": "LS_LEFT",
         "top_left_bottom_left": "None",
         "top_right_bottom_right": "None",
         "top_left_bottom_right": "None",
         "top_right_bottom_left": "None"
-    },
-    "theme": "dark"
+    }
 }
