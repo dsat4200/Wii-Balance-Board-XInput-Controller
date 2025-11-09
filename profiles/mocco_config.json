@@ -3,7 +3,7 @@
     "polling_rate_hz": 100,
     "averaging_samples": 4,
     "dead_zone_kg": 0.2,
-    "theme": "dark",
+    "theme": "evangelion",
     "button_thresholds_kg": {
         "top_left": 4.0,
         "bottom_left": 4.0,

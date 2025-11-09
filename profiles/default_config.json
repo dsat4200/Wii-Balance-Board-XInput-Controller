@@ -16,11 +16,12 @@
         "bottom_right": "XUSB_GAMEPAD_A"
     },
     "combination_mappings": {
-        "top_left_top_right": "None",
-        "bottom_left_bottom_right": "None",
-        "top_left_bottom_left": "None",
-        "top_right_bottom_right": "None",
-        "top_left_bottom_right": "None",
-        "top_right_bottom_left": "None"
-    }
+        "top_left_top_right": null,
+        "bottom_left_bottom_right": null,
+        "top_left_bottom_left": null,
+        "top_right_bottom_right": null,
+        "top_left_bottom_right": null,
+        "top_right_bottom_left": null
+    },
+    "theme": "cherry_dark"
 }

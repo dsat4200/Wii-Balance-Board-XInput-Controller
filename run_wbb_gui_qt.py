@@ -12,12 +12,13 @@ from PyQt6.QtGui import QFont
 from WiiBalanceBoard_qt import WiiBalanceBoard # Import the Qt-enabled API
 from wbb_visuals import CoMWidget # Stylesheets are removed from here
 
-# --- NEW: Folder Constants ---
+# --- Folder Constants ---
 PROFILES_DIR = "profiles"
 THEMES_DIR = "themes"
 
 class BalanceBoardApp(QWidget):
     
+    # --- Data for Mappings ---
     VGAMEPAD_BUTTON_MAP = {
         "A (Cross ✕)": "XUSB_GAMEPAD_A",
         "B (Circle ○)": "XUSB_GAMEPAD_B",
@@ -33,18 +34,12 @@ class BalanceBoardApp(QWidget):
     }
     
     VGAMEPAD_COMBO_MAP = {
-        "Left Stick Up": "LS_UP",
-        "Left Stick Down": "LS_DOWN",
-        "Left Stick Left": "LS_LEFT",
-        "Left Stick Right": "LS_RIGHT",
-        "Left Stick Up-Left": "LS_UP_LEFT",
-        "Left Stick Up-Right": "LS_UP_RIGHT",
-        "Left Stick Down-Left": "LS_DOWN_LEFT",
-        "Left Stick Down-Right": "LS_DOWN_RIGHT",
-        "D-Pad Up": "DPAD_UP",
-        "D-Pad Down": "DPAD_DOWN",
-        "D-Pad Left": "DPAD_LEFT",
-        "D-Pad Right": "DPAD_RIGHT",
+        "Left Stick Up": "LS_UP", "Left Stick Down": "LS_DOWN",
+        "Left Stick Left": "LS_LEFT", "Left Stick Right": "LS_RIGHT",
+        "Left Stick Up-Left": "LS_UP_LEFT", "Left Stick Up-Right": "LS_UP_RIGHT",
+        "Left Stick Down-Left": "LS_DOWN_LEFT", "Left Stick Down-Right": "LS_DOWN_RIGHT",
+        "D-Pad Up": "DPAD_UP", "D-Pad Down": "DPAD_DOWN",
+        "D-Pad Left": "DPAD_LEFT", "D-Pad Right": "DPAD_RIGHT",
         "None": None
     }
     
@@ -52,6 +47,38 @@ class BalanceBoardApp(QWidget):
         "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
     }
 
+    # --- Data for Loops ---
+    QUADRANT_KEYS = ("top_left", "bottom_left", "top_right", "bottom_right")
+    
+    COMBO_MAPPING_KEYS = (
+        "top_left_top_right", "bottom_left_bottom_right", 
+        "top_left_bottom_left", "top_right_bottom_right",
+        "top_left_bottom_right", "top_right_bottom_left"
+    )
+
+    COMBO_DEFINITIONS = [
+        ({"top_left", "top_right"}, "top_left_top_right"),
+        ({"bottom_left", "bottom_right"}, "bottom_left_bottom_right"),
+        ({"top_left", "bottom_left"}, "top_left_bottom_left"),
+        ({"top_right", "bottom_right"}, "top_right_bottom_right"),
+        ({"top_left", "bottom_right"}, "top_left_bottom_right"),
+        ({"top_right", "bottom_left"}, "top_right_bottom_left"),
+    ]
+
+    COMBO_ACTIONS = {
+        "LS_UP": (0, 32767, None),
+        "LS_DOWN": (0, -32767, None),
+        "LS_LEFT": (-32767, 0, None),
+        "LS_RIGHT": (32767, 0, None),
+        "LS_UP_LEFT": (-32767, 32767, None),
+        "LS_UP_RIGHT": (32767, 32767, None),
+        "LS_DOWN_LEFT": (-32767, -32767, None),
+        "LS_DOWN_RIGHT": (32767, -32767, None),
+        "DPAD_UP": (0, 0, "DPAD_UP"),
+        "DPAD_DOWN": (0, 0, "DPAD_DOWN"),
+        "DPAD_LEFT": (0, 0, "DPAD_LEFT"),
+        "DPAD_RIGHT": (0, 0, "DPAD_RIGHT"),
+    }
     
     def __init__(self):
         super().__init__()
@@ -63,15 +90,11 @@ class BalanceBoardApp(QWidget):
         self.profile_files = []
         self.current_profile_file = ""
         
-        self.themes = {} # Will store {"theme_name": {"base": "light", "stylesheet": "..."}}
+        self.themes = {} 
         self.current_theme_name = "light"
         
         self.REVERSE_VGAMEPAD_MAP = {v: k for k, v in self.VGAMEPAD_BUTTON_MAP.items()}
         self.REVERSE_VGAMEPAD_COMBO_MAP = {v: k for k, v in self.VGAMEPAD_COMBO_MAP.items()}
-        
-        self.thresholds = {}
-        self.button_mappings = {}
-        self.combination_mappings = {}
         
         self.button_view_mode = "xbox"
         
@@ -140,31 +163,23 @@ class BalanceBoardApp(QWidget):
         self.total_weight_label.setFont(QFont("Helvetica", 26, QFont.Weight.Bold))
         self.total_weight_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        quad_layout = QHBoxLayout()
+        # Quadrant Labels
         quad_frame = QFrame()
-        quad_frame.setLayout(quad_layout)
-        
+        quad_layout = QGridLayout(quad_frame)
         self.tl_label = QLabel("TL: --.- kg")
         self.tr_label = QLabel("TR: --.- kg")
         self.bl_label = QLabel("BL: --.- kg")
         self.br_label = QLabel("BR: --.- kg")
         
+        quad_layout.addWidget(self.tl_label, 0, 0)
+        quad_layout.addWidget(self.tr_label, 0, 1)
+        quad_layout.addWidget(self.bl_label, 1, 0)
+        quad_layout.addWidget(self.br_label, 1, 1)
+        
         for label in [self.tl_label, self.tr_label, self.bl_label, self.br_label]:
             label.setFont(QFont("Helvetica", 11))
-
-        v_layout_left = QVBoxLayout()
-        v_layout_left.addWidget(self.tl_label)
-        v_layout_left.addWidget(self.bl_label)
-        
-        v_layout_right = QVBoxLayout()
-        v_layout_right.addWidget(self.tr_label)
-        v_layout_right.addWidget(self.br_label)
-        
-        quad_layout.addLayout(v_layout_left)
-        quad_layout.addLayout(v_layout_right)
         
         self.com_widget = CoMWidget()
-        
         com_widget_layout = QHBoxLayout()
         com_widget_layout.addStretch()
         com_widget_layout.addWidget(self.com_widget)
@@ -172,8 +187,8 @@ class BalanceBoardApp(QWidget):
 
         self.toggle_view_button = QPushButton("Show PlayStation Icons (△, ○, ✕, □)")
         self.toggle_view_button.setFont(QFont("Helvetica", 10))
-        self.toggle_view_button.clicked.connect(self.on_toggle_view)
         
+        # --- Threshold Frame ---
         threshold_frame = QFrame()
         threshold_frame.setFrameShape(QFrame.Shape.StyledPanel)
         threshold_layout = QGridLayout(threshold_frame)
@@ -186,25 +201,29 @@ class BalanceBoardApp(QWidget):
         self.spin_tr = QDoubleSpinBox(decimals=1, minimum=0.1, maximum=100.0, singleStep=0.5, suffix=" kg")
         self.spin_br = QDoubleSpinBox(decimals=1, minimum=0.1, maximum=100.0, singleStep=0.5, suffix=" kg")
 
-        self.spin_tl.valueChanged.connect(lambda v: self.on_threshold_changed("top_left", v))
-        self.spin_bl.valueChanged.connect(lambda v: self.on_threshold_changed("bottom_left", v))
-        self.spin_tr.valueChanged.connect(lambda v: self.on_threshold_changed("top_right", v))
-        self.spin_br.valueChanged.connect(lambda v: self.on_threshold_changed("bottom_right", v))
+        self.spin_widgets = {
+            "top_left": self.spin_tl, "bottom_left": self.spin_bl,
+            "top_right": self.spin_tr, "bottom_right": self.spin_br
+        }
 
-        def create_threshold_label(text):
+        def create_label(text):
             lbl = QLabel(text)
             lbl.setFont(QFont("Helvetica", 10))
             return lbl
 
-        threshold_layout.addWidget(create_threshold_label("Top-Left:"), 1, 0)
+        threshold_layout.addWidget(create_label("Top-Left:"), 1, 0)
         threshold_layout.addWidget(self.spin_tl, 1, 1)
-        threshold_layout.addWidget(create_threshold_label("Bottom-Left:"), 2, 0)
-        threshold_layout.addWidget(self.spin_bl, 2, 1)
-        threshold_layout.addWidget(create_threshold_label("Top-Right:"), 1, 2)
+        threshold_layout.addWidget(create_label("Top-Right:"), 1, 2)
         threshold_layout.addWidget(self.spin_tr, 1, 3)
-        threshold_layout.addWidget(create_threshold_label("Bottom-Right:"), 2, 2)
+        threshold_layout.addWidget(create_label("Bottom-Left:"), 2, 0)
+        threshold_layout.addWidget(self.spin_bl, 2, 1)
+        threshold_layout.addWidget(create_label("Bottom-Right:"), 2, 2)
         threshold_layout.addWidget(self.spin_br, 2, 3)
 
+        for key, spin_box in self.spin_widgets.items():
+            spin_box.valueChanged.connect(lambda v, k=key: self.on_threshold_changed(k, v))
+
+        # --- Button Mapping Frame ---
         mapping_frame = QFrame()
         mapping_frame.setFrameShape(QFrame.Shape.StyledPanel)
         mapping_layout = QGridLayout(mapping_frame)
@@ -217,26 +236,25 @@ class BalanceBoardApp(QWidget):
         self.combo_bl = QComboBox()
         self.combo_br = QComboBox()
         
-        combos = [self.combo_tl, self.combo_tr, self.combo_bl, self.combo_br]
-        keys = ["top_left", "top_right", "bottom_left", "bottom_right"]
+        self.mapping_combos = {
+            "top_left": self.combo_tl, "top_right": self.combo_tr,
+            "bottom_left": self.combo_bl, "bottom_right": self.combo_br
+        }
         
-        for combo, key in zip(combos, keys):
+        for key, combo in self.mapping_combos.items():
             combo.addItems(self.VGAMEPAD_BUTTON_MAP.keys())
+            combo.currentTextChanged.connect(lambda text, k=key: self.on_mapping_changed(k, text))
 
-        self.combo_tl.currentTextChanged.connect(lambda text: self.on_mapping_changed("top_left", text))
-        self.combo_tr.currentTextChanged.connect(lambda text: self.on_mapping_changed("top_right", text))
-        self.combo_bl.currentTextChanged.connect(lambda text: self.on_mapping_changed("bottom_left", text))
-        self.combo_br.currentTextChanged.connect(lambda text: self.on_mapping_changed("bottom_right", text))
-
-        mapping_layout.addWidget(create_threshold_label("Top-Left:"), 1, 0)
+        mapping_layout.addWidget(create_label("Top-Left:"), 1, 0)
         mapping_layout.addWidget(self.combo_tl, 1, 1)
-        mapping_layout.addWidget(create_threshold_label("Top-Right:"), 1, 2)
+        mapping_layout.addWidget(create_label("Top-Right:"), 1, 2)
         mapping_layout.addWidget(self.combo_tr, 1, 3)
-        mapping_layout.addWidget(create_threshold_label("Bottom-Left:"), 2, 0)
+        mapping_layout.addWidget(create_label("Bottom-Left:"), 2, 0)
         mapping_layout.addWidget(self.combo_bl, 2, 1)
-        mapping_layout.addWidget(create_threshold_label("Bottom-Right:"), 2, 2)
+        mapping_layout.addWidget(create_label("Bottom-Right:"), 2, 2)
         mapping_layout.addWidget(self.combo_br, 2, 3)
 
+        # --- Combination Mapping Frame ---
         combo_mapping_frame = QFrame()
         combo_mapping_frame.setFrameShape(QFrame.Shape.StyledPanel)
         combo_mapping_layout = QGridLayout(combo_mapping_frame)
@@ -251,69 +269,55 @@ class BalanceBoardApp(QWidget):
         self.combo_tl_br = QComboBox()
         self.combo_tr_bl = QComboBox()
         
-        combo_combos = [
-            self.combo_tl_tr, self.combo_bl_br, self.combo_tl_bl, 
-            self.combo_tr_br, self.combo_tl_br, self.combo_tr_bl
-        ]
-        
-        for combo in combo_combos:
+        self.combo_combos_widgets = {
+            "top_left_top_right": self.combo_tl_tr, "bottom_left_bottom_right": self.combo_bl_br,
+            "top_left_bottom_left": self.combo_tl_bl, "top_right_bottom_right": self.combo_tr_br,
+            "top_left_bottom_right": self.combo_tl_br, "top_right_bottom_left": self.combo_tr_bl
+        }
+
+        for key, combo in self.combo_combos_widgets.items():
             combo.addItems(self.VGAMEPAD_COMBO_MAP.keys())
+            combo.currentTextChanged.connect(lambda text, k=key: self.on_combo_mapping_changed(k, text))
 
-        self.combo_tl_tr.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("top_left_top_right", text))
-        self.combo_bl_br.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("bottom_left_bottom_right", text))
-        self.combo_tl_bl.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("top_left_bottom_left", text))
-        self.combo_tr_br.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("top_right_bottom_right", text))
-        self.combo_tl_br.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("top_left_bottom_right", text))
-        self.combo_tr_bl.currentTextChanged.connect(lambda text: self.on_combo_mapping_changed("top_right_bottom_left", text))
-
-        def create_mapping_label(text):
-            lbl = QLabel(text)
-            lbl.setFont(QFont("Helvetica", 10))
-            return lbl
-
-        combo_mapping_layout.addWidget(create_mapping_label("Top-Left + Top-Right:"), 1, 0)
+        combo_mapping_layout.addWidget(create_label("Top-Left + Top-Right:"), 1, 0)
         combo_mapping_layout.addWidget(self.combo_tl_tr, 1, 1)
-        combo_mapping_layout.addWidget(create_mapping_label("Bottom-Left + Bottom-Right:"), 2, 0)
+        combo_mapping_layout.addWidget(create_label("Bottom-Left + Bottom-Right:"), 2, 0)
         combo_mapping_layout.addWidget(self.combo_bl_br, 2, 1)
-        combo_mapping_layout.addWidget(create_mapping_label("Top-Left + Bottom-Left:"), 3, 0)
+        combo_mapping_layout.addWidget(create_label("Top-Left + Bottom-Left:"), 3, 0)
         combo_mapping_layout.addWidget(self.combo_tl_bl, 3, 1)
-        combo_mapping_layout.addWidget(create_mapping_label("Top-Right + Bottom-Right:"), 4, 0)
+        combo_mapping_layout.addWidget(create_label("Top-Right + Bottom-Right:"), 4, 0)
         combo_mapping_layout.addWidget(self.combo_tr_br, 4, 1)
-        combo_mapping_layout.addWidget(create_mapping_label("Top-Left + Bottom-Right:"), 5, 0)
+        combo_mapping_layout.addWidget(create_label("Top-Left + Bottom-Right:"), 5, 0)
         combo_mapping_layout.addWidget(self.combo_tl_br, 5, 1)
-        combo_mapping_layout.addWidget(create_mapping_label("Top-Right + Bottom-Left:"), 6, 0)
+        combo_mapping_layout.addWidget(create_label("Top-Right + Bottom-Left:"), 6, 0)
         combo_mapping_layout.addWidget(self.combo_tr_bl, 6, 1)
 
+        # --- Main Buttons ---
         self.tare_button = QPushButton("Tare (Zero)")
-        self.tare_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
-        self.tare_button.setEnabled(False)
-        self.tare_button.setMinimumHeight(35)
-        
         self.save_button = QPushButton("Save Profile")
-        self.save_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
-        self.save_button.setMinimumHeight(35)
-        
         self.rescan_button = QPushButton("Rescan for Board")
-        self.rescan_button.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
-        self.rescan_button.setMinimumHeight(35)
         
-        # --- Removed Toggle Theme Button ---
-        
+        for btn in [self.tare_button, self.save_button, self.rescan_button]:
+            btn.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
+            btn.setMinimumHeight(35)
+            
+        self.tare_button.setEnabled(False)
+
         button_layout_1 = QHBoxLayout()
         button_layout_1.addWidget(self.tare_button)
         button_layout_1.addWidget(self.save_button)
         
         button_layout_2 = QHBoxLayout()
         button_layout_2.addWidget(self.rescan_button)
-        # button_layout_2.addWidget(self.toggle_theme_button) # Removed
         
         self.status_label = QLabel("Initializing...")
         self.status_label.setObjectName("status_label") # Set object name for QSS
         self.status_label.setFont(QFont("Helvetica", 10))
         self.status_label.setStyleSheet("border-top: 1px solid #CCC; padding: 5px;")
         
-        main_layout.addWidget(profile_frame) # Changed from config_frame
-        main_layout.addWidget(theme_frame)   # Added
+        # --- Add Widgets to Layout ---
+        main_layout.addWidget(profile_frame) 
+        main_layout.addWidget(theme_frame)   
         main_layout.addWidget(total_weight_header)
         main_layout.addWidget(self.total_weight_label)
         main_layout.addWidget(quad_frame)
@@ -332,13 +336,14 @@ class BalanceBoardApp(QWidget):
         scroll_area.setWidget(scroll_widget)
         outer_layout.addWidget(scroll_area)
         
+        # --- Connections ---
         self.tare_button.clicked.connect(self.on_tare_click)
-        self.save_button.clicked.connect(self.save_profile) # Renamed from save_config
+        self.save_button.clicked.connect(self.save_profile)
         self.rescan_button.clicked.connect(self.on_rescan_click)
-        # self.toggle_theme_button.clicked.connect(self.on_toggle_theme) # Removed
+        self.toggle_view_button.clicked.connect(self.on_toggle_view)
         
-        self.profile_combo.currentTextChanged.connect(self.on_profile_selected) # Renamed
-        self.theme_combo.currentTextChanged.connect(self.on_theme_selected) # Added
+        self.profile_combo.currentTextChanged.connect(self.on_profile_selected)
+        self.theme_combo.currentTextChanged.connect(self.on_theme_selected)
         
 
     def _create_and_start_thread(self):
@@ -368,47 +373,43 @@ class BalanceBoardApp(QWidget):
         self.rescan_button.setEnabled(True)
 
     
+    def _create_file_if_not_exists(self, path, data, is_json=True):
+        """Helper to create a default file."""
+        if not os.path.exists(path):
+            print(f"Creating default file: {path}")
+            try:
+                with open(path, "w") as f:
+                    if is_json:
+                        json.dump(data, f, indent=4)
+                    else:
+                        f.write(data)
+            except Exception as e:
+                print(f"Failed to write default file {path}: {e}")
+
     def ensure_folders_exist(self):
         """Creates profiles and themes folders and populates them if empty."""
         os.makedirs(PROFILES_DIR, exist_ok=True)
         os.makedirs(THEMES_DIR, exist_ok=True)
         
+        # Create default profile
         default_profile_path = os.path.join(PROFILES_DIR, "default_config.json")
-        if not os.path.exists(default_profile_path):
-            print("Creating default_config.json")
-            default_config = self._get_built_in_defaults()
-            try:
-                with open(default_profile_path, "w") as f:
-                    json.dump(default_config, f, indent=4)
-            except Exception as e:
-                print(f"Failed to write default config: {e}")
+        self._create_file_if_not_exists(default_profile_path, self._get_built_in_defaults())
 
-        # Check and create default theme files
+        # Create default light theme
         light_theme_path = os.path.join(THEMES_DIR, "light.json")
-        if not os.path.exists(light_theme_path):
-            print("Creating light.json")
-            light_theme = {
-              "base": "light",
-              "stylesheet": "QWidget {\n    background-color: #f0f0f0;\n    color: #000000;\n}\nQPushButton {\n    background-color: #e1e1e1;\n    border: 1px solid #adadad;\n    padding: 5px;\n    border-radius: 3px;\n}\nQPushButton:hover {\n    background-color: #cacaca;\n}\nQPushButton:pressed {\n    background-color: #b0b0b0;\n}\nQPushButton:disabled {\n    background-color: #dcdcdc;\n    color: #888888;\n}\nQFrame {\n    border: 1px solid #cccccc;\n    border-radius: 4px;\n}\nQComboBox {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    border-radius: 3px;\n    padding: 3px;\n}\nQComboBox::drop-down {\n    border-left: 1px solid #adadad;\n}\nQComboBox QAbstractItemView {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    selection-background-color: #d3d3d3;\n}\nQDoubleSpinBox {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    border-radius: 3px;\n    padding: 3px;\n}\nQLabel {\n    background-color: transparent;\n    border: none;\n}\n#total_weight_label {\n    color: #007ACC;\n}\n#status_label {\n    color: #000000;\n    border-top: 1px solid #CCC;\n}\nQScrollArea {\n    border: none;\n}\nQScrollBar:vertical {\n    background: #f0f0f0;\n    width: 12px;\n    margin: 0px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical {\n    background: #c0c0c0;\n    min-height: 20px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical:hover {\n    background: #a0a0a0;\n}\nQScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {\n    background: none;\n    height: 0px;\n    subcontrol-position: top;\n    subcontrol-origin: margin;\n}\n"
-            }
-            try:
-                with open(light_theme_path, "w") as f:
-                    json.dump(light_theme, f)
-            except Exception as e:
-                print(f"Failed to write light.json: {e}")
+        light_theme = {
+            "base": "light",
+            "stylesheet": "QWidget {\n    background-color: #f0f0f0;\n    color: #000000;\n}\nQPushButton {\n    background-color: #e1e1e1;\n    border: 1px solid #adadad;\n    padding: 5px;\n    border-radius: 3px;\n}\nQPushButton:hover {\n    background-color: #cacaca;\n}\nQPushButton:pressed {\n    background-color: #b0b0b0;\n}\nQPushButton:disabled {\n    background-color: #dcdcdc;\n    color: #888888;\n}\nQFrame {\n    border: 1px solid #cccccc;\n    border-radius: 4px;\n}\nQComboBox {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    border-radius: 3px;\n    padding: 3px;\n}\nQComboBox::drop-down {\n    border-left: 1px solid #adadad;\n}\nQComboBox QAbstractItemView {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    selection-background-color: #d3d3d3;\n}\nQDoubleSpinBox {\n    background-color: #ffffff;\n    border: 1px solid #adadad;\n    border-radius: 3px;\n    padding: 3px;\n}\nQLabel {\n    background-color: transparent;\n    border: none;\n}\n#total_weight_label {\n    color: #007ACC;\n}\n#status_label {\n    color: #000000;\n    border-top: 1px solid #CCC;\n}\nQScrollArea {\n    border: none;\n}\nQScrollBar:vertical {\n    background: #f0f0f0;\n    width: 12px;\n    margin: 0px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical {\n    background: #c0c0c0;\n    min-height: 20px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical:hover {\n    background: #a0a0a0;\n}\nQScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {\n    background: none;\n    height: 0px;\n    subcontrol-position: top;\n    subcontrol-origin: margin;\n}\n"
+        }
+        self._create_file_if_not_exists(light_theme_path, light_theme)
                 
+        # Create default dark theme
         dark_theme_path = os.path.join(THEMES_DIR, "dark.json")
-        if not os.path.exists(dark_theme_path):
-            print("Creating dark.json")
-            dark_theme = {
-              "base": "dark",
-              "stylesheet": "QWidget {\n    background-color: #282a36;\n    color: #f8f8f2;\n}\nQPushButton {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    padding: 5px;\n    border-radius: 3px;\n}\nQPushButton:hover {\n    background-color: #4f5368;\n}\nQPushButton:pressed {\n    background-color: #3b3e51;\n}\nQPushButton:disabled {\n    background-color: #3b3e51;\n    color: #6272a4;\n}\nQFrame {\n    border: 1px solid #44475a;\n    border-radius: 4px;\n}\nQComboBox {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    border-radius: 3px;\n    padding: 3px;\n}\nQComboBox::drop-down {\n    border-left: 1px solid #6272a4;\n}\nQComboBox QAbstractItemView {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    selection-background-color: #6272a4;\n}\nQDoubleSpinBox {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    border-radius: 3px;\n    padding: 3px;\n}\nQLabel {\n    background-color: transparent;\n    border: none;\n}\n#total_weight_label {\n    color: #50fa7b;\n}\n#status_label {\n    color: #bd93f9;\n    border-top: 1px solid #44475a;\n}\nQScrollArea {\n    border: none;\n}\nQScrollBar:vertical {\n    background: #282a36;\n    width: 12px;\n    margin: 0px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical {\n    background: #44475a;\n    min-height: 20px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical:hover {\n    background: #6272a4;\n}\nQScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {\n    background: none;\n    height: 0px;\n    subcontrol-position: top;\n    subcontrol-origin: margin;\n}\n"
-            }
-            try:
-                with open(dark_theme_path, "w") as f:
-                    json.dump(dark_theme, f)
-            except Exception as e:
-                print(f"Failed to write dark.json: {e}")
+        dark_theme = {
+            "base": "dark",
+            "stylesheet": "QWidget {\n    background-color: #282a36;\n    color: #f8f8f2;\n}\nQPushButton {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    padding: 5px;\n    border-radius: 3px;\n}\nQPushButton:hover {\n    background-color: #4f5368;\n}\nQPushButton:pressed {\n    background-color: #3b3e51;\n}\nQPushButton:disabled {\n    background-color: #3b3e51;\n    color: #6272a4;\n}\nQFrame {\n    border: 1px solid #44475a;\n    border-radius: 4px;\n}\nQComboBox {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    border-radius: 3px;\n    padding: 3px;\n}\nQComboBox::drop-down {\n    border-left: 1px solid #6272a4;\n}\nQComboBox QAbstractItemView {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    selection-background-color: #6272a4;\n}\nQDoubleSpinBox {\n    background-color: #44475a;\n    border: 1px solid #6272a4;\n    border-radius: 3px;\n    padding: 3px;\n}\nQLabel {\n    background-color: transparent;\n    border: none;\n}\n#total_weight_label {\n    color: #50fa7b;\n}\n#status_label {\n    color: #bd93f9;\n    border-top: 1px solid #44475a;\n}\nQScrollArea {\n    border: none;\n}\nQScrollBar:vertical {\n    background: #282a36;\n    width: 12px;\n    margin: 0px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical {\n    background: #44475a;\n    min-height: 20px;\n    border-radius: 6px;\n}\nQScrollBar::handle:vertical:hover {\n    background: #6272a4;\n}\nQScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {\n    background: none;\n    height: 0px;\n    subcontrol-position: top;\n    subcontrol-origin: margin;\n}\n"
+        }
+        self._create_file_if_not_exists(dark_theme_path, dark_theme)
 
     def scan_and_load_themes(self):
         """Scans the themes/ folder and populates the theme dropdown."""
@@ -438,11 +439,9 @@ class BalanceBoardApp(QWidget):
             
         self.profile_combo.clear()
         
-        # Add just the filenames to the combo box
         basenames = [os.path.basename(f) for f in self.profile_files]
         self.profile_combo.addItems(basenames)
         
-        # Determine which profile to load
         user_profile_name = "user_config.json"
         default_profile_name = "default_config.json"
         
@@ -459,7 +458,6 @@ class BalanceBoardApp(QWidget):
             
         self.profile_combo.setCurrentText(initial_file_name)
         
-        # self.current_profile_file is the full path
         self.current_profile_file = os.path.join(PROFILES_DIR, initial_file_name) 
         self.config = self.load_config_file(self.current_profile_file)
         self.update_ui_from_config()
@@ -489,22 +487,14 @@ class BalanceBoardApp(QWidget):
         self.current_profile_file = full_path
         self.config = self.load_config_file(full_path)
         
-        # Update UI, which will also set the theme combo
         self.update_ui_from_config() 
         self.set_status(f"✅ Loaded {filename_basename}")
 
     def update_ui_from_config(self):
         """Populates all UI widgets based on the currently loaded self.config."""
-        self.thresholds = self.config.get("button_thresholds_kg", {
-            "top_left": 10.0, "bottom_left": 10.0, "top_right": 10.0, "bottom_right": 10.0
-        })
-        self.button_mappings = self.config.get("button_mappings", {
-            "top_left": "None", "bottom_left": "None", "top_right": "None", "bottom_right": "None"
-        })
-        self.combination_mappings = self.config.get("combination_mappings", {
-            "top_left_top_right": "None", "bottom_left_bottom_right": "None", "top_left_bottom_left": "None",
-            "top_right_bottom_right": "None", "top_left_bottom_right": "None", "top_right_bottom_left": "None"
-        })
+        self.thresholds = self.config.get("button_thresholds_kg", {})
+        self.button_mappings = self.config.get("button_mappings", {})
+        self.combination_mappings = self.config.get("combination_mappings", {})
         
         # --- Theme Handling ---
         theme_name = self.config.get("theme", "light")
@@ -513,7 +503,7 @@ class BalanceBoardApp(QWidget):
             theme_name = "light"
             
         self.current_theme_name = theme_name
-        # Disconnect to prevent signal loop, set, reconnect
+        
         try:
             self.theme_combo.currentTextChanged.disconnect(self.on_theme_selected)
         except TypeError:
@@ -521,26 +511,17 @@ class BalanceBoardApp(QWidget):
         self.theme_combo.setCurrentText(theme_name)
         self.theme_combo.currentTextChanged.connect(self.on_theme_selected)
         
-        self.apply_theme() # Apply the theme
-        
         # --- Other UI Elements ---
-        self.spin_tl.setValue(self.thresholds.get("top_left", 10.0))
-        self.spin_bl.setValue(self.thresholds.get("bottom_left", 10.0))
-        self.spin_tr.setValue(self.thresholds.get("top_right", 10.0))
-        self.spin_br.setValue(self.thresholds.get("bottom_right", 10.0))
+        for key, spin_box in self.spin_widgets.items():
+            spin_box.setValue(self.thresholds.get(key, 10.0))
 
-        self.combo_tl.setCurrentText(self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("top_left"), "None"))
-        self.combo_tr.setCurrentText(self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("top_right"), "None"))
-        self.combo_bl.setCurrentText(self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("bottom_left"), "None"))
-        self.combo_br.setCurrentText(self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("bottom_right"), "None"))
+        for key, combo_box in self.mapping_combos.items():
+            combo_box.setCurrentText(self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get(key), "None"))
 
-        self.combo_tl_tr.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("top_left_top_right"), "None"))
-        self.combo_bl_br.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("bottom_left_bottom_right"), "None"))
-        self.combo_tl_bl.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("top_left_bottom_left"), "None"))
-        self.combo_tr_br.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("top_right_bottom_right"), "None"))
-        self.combo_tl_br.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("top_left_bottom_right"), "None"))
-        self.combo_tr_bl.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get("top_right_bottom_left"), "None"))
+        for key, combo_box in self.combo_combos_widgets.items():
+            combo_box.setCurrentText(self.REVERSE_VGAMEPAD_COMBO_MAP.get(self.combination_mappings.get(key), "None"))
 
+        self.apply_theme() # Apply the theme
         self.update_all_com_labels()
         self.com_widget.update_threshold_indicators(self.thresholds)
         
@@ -564,12 +545,9 @@ class BalanceBoardApp(QWidget):
               "bottom_right": "XUSB_GAMEPAD_Y"
             },
             "combination_mappings": {
-                "top_left_top_right": "None",
-                "bottom_left_bottom_right": "None",
-                "top_left_bottom_left": "None",
-                "top_right_bottom_right": "None",
-                "top_left_bottom_right": "None",
-                "top_right_bottom_left": "None"
+                "top_left_top_right": "None", "bottom_left_bottom_right": "None",
+                "top_left_bottom_left": "None", "top_right_bottom_right": "None",
+                "top_left_bottom_right": "None", "top_right_bottom_left": "None"
             }
         }
 
@@ -580,7 +558,6 @@ class BalanceBoardApp(QWidget):
         self.rescan_button.setEnabled(False)
         
         if self.processing_thread and self.processing_thread.isRunning():
-            # Pass the latest config to the new board instance
             self.processing_thread.finished.connect(self._create_and_start_thread, Qt.ConnectionType.SingleShotConnection)
             self.board.stop_processing()
         else:
@@ -611,15 +588,9 @@ class BalanceBoardApp(QWidget):
 
 
     def update_all_com_labels(self):
-        tl_text = self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("top_left"))
-        tr_text = self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("top_right"))
-        bl_text = self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("bottom_left"))
-        br_text = self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get("bottom_right"))
-
-        self.com_widget.update_label("top_left", tl_text, self.button_view_mode)
-        self.com_widget.update_label("top_right", tr_text, self.button_view_mode)
-        self.com_widget.update_label("bottom_left", bl_text, self.button_view_mode)
-        self.com_widget.update_label("bottom_right", br_text, self.button_view_mode)
+        for key in self.QUADRANT_KEYS:
+            text = self.REVERSE_VGAMEPAD_MAP.get(self.button_mappings.get(key))
+            self.com_widget.update_label(key, text, self.button_view_mode)
     
     def on_toggle_view(self):
         if self.button_view_mode == "xbox":
@@ -636,34 +607,36 @@ class BalanceBoardApp(QWidget):
         self.com_widget.update_threshold_indicators(self.thresholds)
 
     def on_mapping_changed(self, key, text):
-        vgamepad_string = self.VGAMEPAD_BUTTON_MAP[text]
+        vgamepad_string = self.VGAMEPAD_BUTTON_MAP.get(text)
         self.button_mappings[key] = vgamepad_string
         print(f"Mapping changed: {key} -> {vgamepad_string}")
         
         self.com_widget.update_label(key, text, self.button_view_mode)
 
     def on_combo_mapping_changed(self, key, text):
-        vgamepad_string = self.VGAMEPAD_COMBO_MAP[text]
+        vgamepad_string = self.VGAMEPAD_COMBO_MAP.get(text)
         self.combination_mappings[key] = vgamepad_string
         print(f"Combination Mapping changed: {key} -> {vgamepad_string}")
 
     def _apply_combo_mapping(self, mapping_str, x, y, dpad_set):
-        ls_max = 32767
-        
-        if mapping_str == "LS_UP": y = ls_max
-        elif mapping_str == "LS_DOWN": y = -ls_max
-        elif mapping_str == "LS_LEFT": x = -ls_max
-        elif mapping_str == "LS_RIGHT": x = ls_max
-        elif mapping_str == "LS_UP_LEFT": y = ls_max; x = -ls_max
-        elif mapping_str == "LS_UP_RIGHT": y = ls_max; x = ls_max
-        elif mapping_str == "LS_DOWN_LEFT": y = -ls_max; x = -ls_max
-        elif mapping_str == "LS_DOWN_RIGHT": y = -ls_max; x = ls_max
-        elif mapping_str == "DPAD_UP": dpad_set.add("DPAD_UP")
-        elif mapping_str == "DPAD_DOWN": dpad_set.add("DPAD_DOWN")
-        elif mapping_str == "DPAD_LEFT": dpad_set.add("DPAD_LEFT")
-        elif mapping_str == "DPAD_RIGHT": dpad_set.add("DPAD_RIGHT")
-        
+        """Uses a dispatch dictionary to apply combo actions."""
+        action = self.COMBO_ACTIONS.get(mapping_str)
+        if action:
+            dx, dy, dpad = action
+            if dx: x = dx
+            if dy: y = dy
+            if dpad: dpad_set.add(dpad)
         return x, y, dpad_set
+
+    def _toggle_gamepad_buttons(self, gamepad_func, button_set, enum_base=vg.XUSB_BUTTON, prefix=""):
+        """Helper to press or release a set of gamepad buttons."""
+        for button_str in button_set:
+            if not button_str: continue
+            # Handle D-Pad prefixing
+            enum_key = f"{prefix}{button_str}" if prefix else button_str
+            button_enum = getattr(enum_base, enum_key, None)
+            if button_enum:
+                gamepad_func(button=button_enum)
 
     def update_gui(self, data):
         quads = data['quadrants_kg']
@@ -677,10 +650,10 @@ class BalanceBoardApp(QWidget):
         x, y = data['center_of_mass']
         
         press_states = {
-            'top_left': quads['top_left'] > self.thresholds['top_left'],
-            'top_right': quads['top_right'] > self.thresholds['top_right'],
-            'bottom_left': quads['bottom_left'] > self.thresholds['bottom_left'],
-            'bottom_right': quads['bottom_right'] > self.thresholds['bottom_right'],
+            'top_left': quads['top_left'] > self.thresholds.get('top_left', 10.0),
+            'top_right': quads['top_right'] > self.thresholds.get('top_right', 10.0),
+            'bottom_left': quads['bottom_left'] > self.thresholds.get('bottom_left', 10.0),
+            'bottom_right': quads['bottom_right'] > self.thresholds.get('bottom_right', 10.0),
         }
         
         if self.gamepad:
@@ -690,85 +663,38 @@ class BalanceBoardApp(QWidget):
             
             pressed_quadrants = {q for q, pressed in press_states.items() if pressed}
             
-            # --- Combination Logic ---
+            # --- Combination Logic (Refactored) ---
             combos_activated = set()
-            
-            if {'top_left', 'top_right'}.issubset(pressed_quadrants):
-                mapping = self.combination_mappings.get("top_left_top_right")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['top_left', 'top_right'])
-
-            if {'bottom_left', 'bottom_right'}.issubset(pressed_quadrants - combos_activated):
-                mapping = self.combination_mappings.get("bottom_left_bottom_right")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['bottom_left', 'bottom_right'])
-
-            if {'top_left', 'bottom_left'}.issubset(pressed_quadrants - combos_activated):
-                mapping = self.combination_mappings.get("top_left_bottom_left")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['top_left', 'bottom_left'])
-            
-            if {'top_right', 'bottom_right'}.issubset(pressed_quadrants - combos_activated):
-                mapping = self.combination_mappings.get("top_right_bottom_right")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['top_right', 'bottom_right'])
-
-            if {'top_left', 'bottom_right'}.issubset(pressed_quadrants - combos_activated):
-                mapping = self.combination_mappings.get("top_left_bottom_right")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['top_left', 'bottom_right'])
-
-            if {'top_right', 'bottom_left'}.issubset(pressed_quadrants - combos_activated):
-                mapping = self.combination_mappings.get("top_right_bottom_left")
-                if mapping:
-                    ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
-                    combos_activated.update(['top_right', 'bottom_left'])
+            for quadrants, mapping_key in self.COMBO_DEFINITIONS:
+                if quadrants.issubset(pressed_quadrants - combos_activated):
+                    mapping = self.combination_mappings.get(mapping_key)
+                    if mapping and mapping != "None":
+                        ls_x, ls_y, dpad_buttons_to_press = self._apply_combo_mapping(mapping, ls_x, ls_y, dpad_buttons_to_press)
+                        combos_activated.update(quadrants)
             
             # --- Individual Button Logic ---
             remaining_pressed = pressed_quadrants - combos_activated
             
             for quad in remaining_pressed:
                 mapping = self.button_mappings.get(quad)
-                if mapping:
+                if mapping and mapping != "None":
                     buttons_to_press_str.add(mapping)
 
-            # --- Apply Gamepad State ---
+            # --- Apply Gamepad State (Refactored) ---
             self.gamepad.left_joystick(x_value=ls_x, y_value=ls_y)
             
             managed_buttons_str = set(self.button_mappings.values())
-            if None in managed_buttons_str:
-                managed_buttons_str.remove(None)
-            if None in buttons_to_press_str:
-                buttons_to_press_str.remove(None)
-                
             buttons_to_release_str = managed_buttons_str - buttons_to_press_str
 
-            for button_str in buttons_to_press_str:
-                button_enum = getattr(vg.XUSB_BUTTON, button_str, None)
-                if button_enum:
-                    self.gamepad.press_button(button=button_enum)
-
-            for button_str in buttons_to_release_str:
-                button_enum = getattr(vg.XUSB_BUTTON, button_str, None)
-                if button_enum:
-                    self.gamepad.release_button(button=button_enum)
+            # Press/Release main buttons
+            self._toggle_gamepad_buttons(self.gamepad.press_button, buttons_to_press_str)
+            self._toggle_gamepad_buttons(self.gamepad.release_button, buttons_to_release_str)
             
+            # Press/Release D-Pad buttons
             dpad_buttons_to_release = self.ALL_DPAD_BUTTONS - dpad_buttons_to_press
-            
-            for dpad_str in dpad_buttons_to_press:
-                dpad_enum = getattr(vg.XUSB_BUTTON, f"XUSB_GAMEPAD_{dpad_str}", None)
-                if dpad_enum:
-                    self.gamepad.press_button(button=dpad_enum)
-                    
-            for dpad_str in dpad_buttons_to_release:
-                dpad_enum = getattr(vg.XUSB_BUTTON, f"XUSB_GAMEPAD_{dpad_str}", None)
-                if dpad_enum:
-                    self.gamepad.release_button(button=dpad_enum)
+            dpad_prefix = "XUSB_GAMEPAD_"
+            self._toggle_gamepad_buttons(self.gamepad.press_button, dpad_buttons_to_press, prefix=dpad_prefix)
+            self._toggle_gamepad_buttons(self.gamepad.release_button, dpad_buttons_to_release, prefix=dpad_prefix)
 
             self.gamepad.update() 
 
@@ -835,8 +761,6 @@ class BalanceBoardApp(QWidget):
             del self.gamepad
             
         event.accept()
-
-# --- Removed deprecated load_config() function ---
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
